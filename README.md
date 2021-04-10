@@ -1,4 +1,4 @@
-# HayDayHelper  ![Quack](https://github.com/spaderkung/HayDayHelper/blob/main/HayDayHelper_Icon.png)
+![Quack](https://github.com/spaderkung/HayDayHelper/blob/main/HayDayHelper_Icon.png)     # HayDayHelper
 API to automate HayDay. Functions ready for use on PC with Android emulator.
 
 
