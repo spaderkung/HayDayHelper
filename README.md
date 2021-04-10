@@ -1,5 +1,6 @@
 # HayDayHelper
 API to automate HayDay. Functions ready for use on PC with Android emulator.
+![Quack](http://url/to/img.png)
 
 # API Features
 * Detect crops in shops, overlays.
