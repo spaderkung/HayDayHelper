@@ -51,14 +51,19 @@
 ;  all coords are messed up if active window.
 CoordMode, Pixel, Screen
 CoordMode, Mouse, Screen
+
+#Include, GeneralFunctions.ahk
 ; ------------------------------------------------------------------------------------------------
 
 
 ; ------------------------------------------------------------------------------------------------
 ; Global for program control
+FORCE_FARM_OR_SNIPE := 1
+
 tempTxt := ""
 
 TICK_TIME_MS := 200         ; Program scan time
+PROGRAM_START_TIME := A_Now
 
 active := false
 
@@ -147,23 +152,35 @@ MAX_SNIPING_RETRIES := 5        ; Times for all sessions the snipe mode can reco
 snipeCyclesDone := 0            ; Times waited at the trigger
 snipesDone := 0                 ; Times triggered
 
-cycleFriendsAfterSnipe := false
 ; In the cycle list a friend appears twice if there are two snipe slots to possibly alternate.
+friendCycleListIndex := 12
+friendCycleList := [[5, 1], [6, 15], [7, 2], [7, 12], [8, 2], [8, 12], [10, 1], [11, 2], [12, 2], [13, 2], [15, 12], [14, 2]]
+
 friendCycleListIndex := 1
-friendCycleList := [[5, 1], [6, 15], [7, 2], [7, 12], [8, 2], [8, 12], [9, 1], [11, 2], [12, 2], [13, 2], [14, 12]]
+friendCycleList := [ [12, 2], [13, 2], [8, 1], [5, 13] ]
+frienCycleListSize := 2 ; XXX Automatic
+cycleFriendsAfterSnipe := true
+
 ; Friends and slots will both change independently, as friend can remove any followers.
 ;                   Special item   
-; Friend    Index   Slot    Price   Goods
-; z29       5       1               Carrot
-; 089       6       13-16   Full     Wheat  <-- Dvs kolla alla 13-16
-; 29036     7       2,12       1      Corn->Carrot
-; 29034     8       2,12       1      Corn->Carrot
-; 55        9       1       Full    Carrot
-;          10
-; z278     11       ?       ?         Corn     
-; haru369  12       2                 Corn    
-; 15       13       2, 12?     ?         Corn
-; ceres01  14       12      ?         Corn Sålde bult på 21. Men hans slot 21 är inte scrollbart fullt. Hamnar halva utanför på sista.
+; Friend         Index   Slot    Price   Goods
+; Greg           1
+; FB             2
+; Google         3
+; Malin          4       1               Carrot
+; 089            5       13-16   Full     Wheat  <-- Dvs kolla alla 13-16
+; 29034          6       2,12       1      Corn->Carrot
+; 29036          7       2,12       1      Corn->Carrot
+; 55             8       1       Full    Carrot
+; Vega           9      
+; z278          10       2          ?      Corn     
+; haru369       11       2                 Corn    
+; 15            12       2, 12?     ?      Corn
+; X             13       2          1      Corn
+; ceres01       14       2, 12      ?      Corn Säljer utrensning på slot 21, men ej scrollbart dit.
+; ceres08       15       2, 12   Full      Corn Säljer utrensning på slot 21, men ej scrollbart dit.
+; map           16       
+; piggy         17
 ; ------------------------------------------------------------------------------------------------
 
 ; ------------------------------------------------------------------------------------------------
@@ -219,14 +236,26 @@ MAX_CROP_OVERLAY_SCREEN := 3 ; Speeds up alignment, but has to be set higher for
 ; Mode/State init.
 plantDone := false      ; Memory used to go dirctly to shop and sell.
 siloBarnFull := false   ; 
+
+farmingStep := 10        
+;   0 - Go to shop
+;   5 - 
+;  10 - Init scale and screen
+;  12 - Move to field
+;  15 - Get field status
+;  20 - Harvest
+;  25 - Plant
+; 100 - Post sale
 ; ------------------------------------------------------------------------------------------------
 
 
 ; ------------------------------------------------------------------------------------------------
 ; Other hay day global
-SHOP_SLOTS_ON_SCREEN := 4
-FRIEND_SLOTS_ON_SCREEN := 7
-TOP_MAX_SELL_SLOTS_SEARCHED := 8
+SHOP_SLOTS_ON_SCREEN := 4           ;   Visible slots in the shops, 4 on PC, 8 on MacOS?
+SHOP_SLOTS_TO_SCROLL := 4
+FRIEND_SLOTS_ON_SCREEN := 7         ;   In the lower right friend list.
+FRIEND_SLOTS_TO_DRAG := 1           ;   Allow for not overdragging.
+TOP_MAX_SELL_SLOTS_SEARCHED := 8    ;   XXX - Used?
 
 ; Update screen recognition functions if adding new.
 SCREEN_HOME         := 0
@@ -319,6 +348,20 @@ BTN_FRIENDS_Y       := 587      ; In app window coords.
 FRIENDS_BAR_OPEN_X  := 175
 FRIENDS_BAR_OPEN_Y  := 618
 FRIENDS_BAR_OPEN_C  := 0xE89800
+; Recognition of Greg in the friend bar to stop scrolling.
+; Coordinates are absolute so to detect in other slots need to shift center.
+FRIEND_GREG_P1_X :=	342
+FRIEND_GREG_P1_Y :=	527
+FRIEND_GREG_P1_C :=	0x68C4E8
+FRIEND_GREG_P2_X :=	338
+FRIEND_GREG_P2_Y :=	563
+FRIEND_GREG_P2_C :=	0x752A2E
+FRIEND_GREG_P3_X :=	350
+FRIEND_GREG_P3_Y :=	575
+FRIEND_GREG_P3_C :=	0x541E20
+FRIEND_GREG_P4_X :=	393
+FRIEND_GREG_P4_Y :=	527
+FRIEND_GREG_P4_C :=	0x68C8E8
 ; For dragging the screen. Have to drag "quick" or the first anchor press will select 
 ;  object on screen for moving it.
 DRAG_ANCHOR_LOWER_LEFT_X    := 155
@@ -361,73 +404,87 @@ RED_X_DERBY_Y    := 90
 ;
 RED_X_BIG_BOX_X := 930
 RED_X_BIG_BOX_Y := 105
-
+;
+RED_X_MANSION_X := 931
+RED_X_MANSION_Y := 94
+;
+RED_X_COMMERCIAL_X := 931
+RED_X_COMMERCIAL_Y := 95
+;
+RED_X_GOOGLE_PLAY_X := 931
+RED_X_GOOGLE_PLAY_Y := 105
+;
+BTN_CLOSE_COMMERCIAL_X := 1033
+BTN_CLOSE_COMMERCIAL_Y := 71
+BTN_START_COMMERCIAL_X := 837
+BTN_START_COMMERCIAL_Y := 508
 
 ; Check if loading screen, 4 points
 LOAD_SCREEN_C := 0x034AC3
-LOAD_SCREEN_1_X := 100
-LOAD_SCREEN_1_Y := 300
-LOAD_SCREEN_2_X := 980
-LOAD_SCREEN_2_Y := 300
-LOAD_SCREEN_3_X := 100
-LOAD_SCREEN_3_Y := 400
-LOAD_SCREEN_4_X := 980
-LOAD_SCREEN_4_Y := 400
+LOAD_SCREEN_P1_X := 100
+LOAD_SCREEN_P1_Y := 300
+LOAD_SCREEN_P2_X := 980
+LOAD_SCREEN_P2_Y := 300
+LOAD_SCREEN_P3_X := 100
+LOAD_SCREEN_P3_Y := 400
+LOAD_SCREEN_P4_X := 980
+LOAD_SCREEN_P4_Y := 400
 ; Perhaps not needed. If location lost, and reason is loading screen, it is temporary. Just wait.
-LOAD_SCREEN_SUMMER_1_X := 268
-LOAD_SCREEN_SUMMER_1_Y := 87
-LOAD_SCREEN_SUMMER_1_C := 0x63DE40
-LOAD_SCREEN_SUMMER_2_X := 784
-LOAD_SCREEN_SUMMER_2_Y := 110
-LOAD_SCREEN_SUMMER_2_C := 0x63D430
-LOAD_SCREEN_SUMMER_3_X := 915
-LOAD_SCREEN_SUMMER_3_Y := 561
-LOAD_SCREEN_SUMMER_3_C := 0xFFF8B8
-LOAD_SCREEN_SUMMER_4_X := 208
-LOAD_SCREEN_SUMMER_4_Y := 459
-LOAD_SCREEN_SUMMER_4_C := 0xFFF8B8
+LOAD_SCREEN_SUMMER_P1_X := 268
+LOAD_SCREEN_SUMMER_P1_Y := 87
+LOAD_SCREEN_SUMMER_P1_C := 0x63DE40
+LOAD_SCREEN_SUMMER_P2_X := 784
+LOAD_SCREEN_SUMMER_P2_Y := 110
+LOAD_SCREEN_SUMMER_P2_C := 0x63D430
+LOAD_SCREEN_SUMMER_P3_X := 915
+LOAD_SCREEN_SUMMER_P3_Y := 561
+LOAD_SCREEN_SUMMER_P3_C := 0xFFF8B8
+LOAD_SCREEN_SUMMER_P4_X := 208
+LOAD_SCREEN_SUMMER_P4_Y := 459
+LOAD_SCREEN_SUMMER_P4_C := 0xFFF8B8
 ; Check if connection lost screen
-LOST_SCREEN_1_X := 268
-LOST_SCREEN_1_Y := 87
-LOST_SCREEN_1_C := 0x63DE40
-LOST_SCREEN_2_X := 784
-LOST_SCREEN_2_Y := 110
-LOST_SCREEN_2_C := 0x63D430
-LOST_SCREEN_3_X := 915
-LOST_SCREEN_3_Y := 561
-LOST_SCREEN_3_C := 0xFFF8B8
-LOST_SCREEN_4_X := 208
-LOST_SCREEN_4_Y := 459
-LOST_SCREEN_4_C := 0xFFF8B8
+LOST_SCREEN_P1_X := 268
+LOST_SCREEN_P1_Y := 87
+LOST_SCREEN_P1_C := 0x63DE40
+LOST_SCREEN_P2_X := 784
+LOST_SCREEN_P2_Y := 110
+LOST_SCREEN_P2_C := 0x63D430
+LOST_SCREEN_P3_X := 915
+LOST_SCREEN_P3_Y := 561
+LOST_SCREEN_P3_C := 0xFFF8B8
+LOST_SCREEN_P4_X := 208
+LOST_SCREEN_P4_Y := 459
+LOST_SCREEN_P4_C := 0xFFF8B8
 ;
 BTN_TRY_AGAIN_X := 544
 BTN_TRY_AGAIN_Y := 600
+;
 ; Home screen detected by: 
-HOME_SCREEN_1_X := 47
-HOME_SCREEN_1_Y := 54
-HOME_SCREEN_1_C := 0xF8E850
-HOME_SCREEN_2_X := 28
-HOME_SCREEN_2_Y := 549
-HOME_SCREEN_2_C := 0xF8E850
-HOME_SCREEN_3_X := 1038
-HOME_SCREEN_3_Y := 70
-HOME_SCREEN_3_C := 0xFFF7A2
-HOME_SCREEN_4_X := 970
-HOME_SCREEN_4_Y := 73
-HOME_SCREEN_4_C := 0xFFEB3E
+HOME_SCREEN_P1_X := 47
+HOME_SCREEN_P1_Y := 54
+HOME_SCREEN_P1_C := 0xF8E850
+HOME_SCREEN_P2_X := 28
+HOME_SCREEN_P2_Y := 549
+HOME_SCREEN_P2_C := 0xF8E850
+HOME_SCREEN_P3_X := 1038
+HOME_SCREEN_P3_Y := 70
+HOME_SCREEN_P3_C := 0xFFF7A2
+HOME_SCREEN_P4_X := 970
+HOME_SCREEN_P4_Y := 73
+HOME_SCREEN_P4_C := 0xFFEB3E
 ; Friend screen identical except home button instead of casher
-FRIEND_SCREEN_1_X := 47
-FRIEND_SCREEN_1_Y := 54
-FRIEND_SCREEN_1_C := 0xF8E850
-FRIEND_SCREEN_2_X := 28
-FRIEND_SCREEN_2_Y := 549
-FRIEND_SCREEN_2_C := 0xD0FFB0
-FRIEND_SCREEN_3_X := 1038
-FRIEND_SCREEN_3_Y := 70
-FRIEND_SCREEN_3_C := 0xFFF7A2
-FRIEND_SCREEN_4_X := 1038
-FRIEND_SCREEN_4_Y := 135
-FRIEND_SCREEN_4_C := 0xFFF6A0
+FRIEND_SCREEN_P1_X := 47
+FRIEND_SCREEN_P1_Y := 54
+FRIEND_SCREEN_P1_C := 0xF8E850
+FRIEND_SCREEN_P2_X := 28
+FRIEND_SCREEN_P2_Y := 549
+FRIEND_SCREEN_P2_C := 0xD0FFB0
+FRIEND_SCREEN_P3_X := 1038
+FRIEND_SCREEN_P3_Y := 70
+FRIEND_SCREEN_P3_C := 0xFFF7A2
+FRIEND_SCREEN_P4_X := 1038
+FRIEND_SCREEN_P4_Y := 135
+FRIEND_SCREEN_P4_C := 0xFFF6A0
 ;
 HOME_ICON_P1_X :=	127
 HOME_ICON_P1_Y :=	576
@@ -491,6 +548,10 @@ RIVER_DETECT_Y := 401 ;435       ; This value should be in game area coords, exc
 ;
 g_AppScaleExtra := 1.0    ; This is the randomised factor added each time the home screen is opened.
 ;
+; Testing both shores
+RIVER_UPPER_REF_Y := 214-34
+RIVER_LOWER_REF_Y := 474-34
+;
 SCREEN_SERVER_OFFLINE_P1_X :=	882
 SCREEN_SERVER_OFFLINE_P1_Y :=	580
 SCREEN_SERVER_OFFLINE_P1_C :=	0xFBD230
@@ -531,6 +592,15 @@ InitGeneralCoords() {
     global FRIENDS_BAR_HEADER_FRIENDS_X        := Ceil( AC2SC(FRIENDS_BAR_HEADER_FRIENDS_X, 0) )
     global FRIENDS_BAR_HEADER_FOLLOWERS_X      := Ceil( AC2SC(FRIENDS_BAR_HEADER_FOLLOWERS_X, 0) )
 
+    global FRIEND_GREG_P1_X := Ceil( AC2SC(FRIEND_GREG_P1_X, 0) )
+    global FRIEND_GREG_P1_Y := Ceil( AC2SC(FRIEND_GREG_P1_Y, 1) )
+    global FRIEND_GREG_P2_X := Ceil( AC2SC(FRIEND_GREG_P2_X, 0) )
+    global FRIEND_GREG_P2_Y := Ceil( AC2SC(FRIEND_GREG_P2_Y, 1) )
+    global FRIEND_GREG_P3_X := Ceil( AC2SC(FRIEND_GREG_P3_X, 0) )
+    global FRIEND_GREG_P3_Y := Ceil( AC2SC(FRIEND_GREG_P3_Y, 1) )
+    global FRIEND_GREG_P4_X := Ceil( AC2SC(FRIEND_GREG_P4_X, 0) )
+    global FRIEND_GREG_P4_Y := Ceil( AC2SC(FRIEND_GREG_P4_Y, 1) )
+
     global FRIEND_SLOT_DIFF_X  := Ceil( APP_SCALE*FRIEND_SLOT_DIFF_X )
     global FRIEND_SLOT1_X  := Ceil( AC2SC(FRIEND_SLOT1_X, 0) )
     global FRIEND_SLOT1_Y  := Ceil( AC2SC(FRIEND_SLOT1_Y, 1) )
@@ -566,43 +636,57 @@ InitGeneralCoords() {
     global RED_X_BIG_BOX_X := Ceil( AC2SC(RED_X_BIG_BOX_X, 0) )
     global RED_X_BIG_BOX_Y := Ceil( AC2SC(RED_X_BIG_BOX_Y, 1) )
 
-    global LOAD_SCREEN_1_X := Ceil( AC2SC(LOAD_SCREEN_1_X, 0) )
-    global LOAD_SCREEN_1_Y := Ceil( AC2SC(LOAD_SCREEN_1_Y, 1) )
-    global LOAD_SCREEN_2_X := Ceil( AC2SC(LOAD_SCREEN_2_X, 0) )
-    global LOAD_SCREEN_2_Y := Ceil( AC2SC(LOAD_SCREEN_2_Y, 1) )
-    global LOAD_SCREEN_3_X := Ceil( AC2SC(LOAD_SCREEN_3_X, 0) )
-    global LOAD_SCREEN_3_Y := Ceil( AC2SC(LOAD_SCREEN_3_Y, 1) )
-    global LOAD_SCREEN_4_X := Ceil( AC2SC(LOAD_SCREEN_4_X, 0) )
-    global LOAD_SCREEN_4_Y := Ceil( AC2SC(LOAD_SCREEN_4_Y, 1) )
+    global RED_X_MANSION_X := Ceil( AC2SC(RED_X_MANSION_X, 0) )
+    global RED_X_MANSION_Y := Ceil( AC2SC(RED_X_MANSION_Y, 1) )
+
+    global RED_X_COMMERCIAL_X := Ceil( AC2SC(RED_X_COMMERCIAL_X, 0) )
+    global RED_X_COMMERCIAL_Y := Ceil( AC2SC(RED_X_COMMERCIAL_Y, 1) )
+
+    global RED_X_GOOGLE_PLAY_X := Ceil( AC2SC(RED_X_GOOGLE_PLAY_X, 0) )
+    global RED_X_GOOGLE_PLAY_Y := Ceil( AC2SC(RED_X_GOOGLE_PLAY_Y, 1) )
+
+    global BTN_CLOSE_COMMERCIAL_X := Ceil( AC2SC(BTN_CLOSE_COMMERCIAL_X, 0) )
+    global BTN_CLOSE_COMMERCIAL_Y := Ceil( AC2SC(BTN_CLOSE_COMMERCIAL_Y, 1) )
+    global BTN_START_COMMERCIAL_X := Ceil( AC2SC(BTN_START_COMMERCIAL_X, 0) )
+    global BTN_START_COMMERCIAL_Y := Ceil( AC2SC(BTN_START_COMMERCIAL_Y, 1) )
+
+    global LOAD_SCREEN_P1_X := Ceil( AC2SC(LOAD_SCREEN_P1_X, 0) )
+    global LOAD_SCREEN_P1_Y := Ceil( AC2SC(LOAD_SCREEN_P1_Y, 1) )
+    global LOAD_SCREEN_P2_X := Ceil( AC2SC(LOAD_SCREEN_P2_X, 0) )
+    global LOAD_SCREEN_P2_Y := Ceil( AC2SC(LOAD_SCREEN_P2_Y, 1) )
+    global LOAD_SCREEN_P3_X := Ceil( AC2SC(LOAD_SCREEN_P3_X, 0) )
+    global LOAD_SCREEN_P3_Y := Ceil( AC2SC(LOAD_SCREEN_P3_Y, 1) )
+    global LOAD_SCREEN_P4_X := Ceil( AC2SC(LOAD_SCREEN_P4_X, 0) )
+    global LOAD_SCREEN_P4_Y := Ceil( AC2SC(LOAD_SCREEN_P4_Y, 1) )
     ;
-    global LOST_SCREEN_1_X := Ceil( AC2SC(  LOST_SCREEN_1_X, 0) )
-    global LOST_SCREEN_1_Y := Ceil( AC2SC(  LOST_SCREEN_1_Y, 1) )
-    global LOST_SCREEN_2_X := Ceil( AC2SC(  LOST_SCREEN_2_X, 0) )
-    global LOST_SCREEN_2_Y := Ceil( AC2SC(  LOST_SCREEN_2_Y, 1) )
-    global LOST_SCREEN_3_X := Ceil( AC2SC(  LOST_SCREEN_3_X, 0) )
-    global LOST_SCREEN_3_Y := Ceil( AC2SC(  LOST_SCREEN_3_Y, 1) )
-    global LOST_SCREEN_4_X := Ceil( AC2SC(  LOST_SCREEN_4_X, 0) )
-    global LOST_SCREEN_4_Y := Ceil( AC2SC(  LOST_SCREEN_4_Y, 1) )
+    global LOST_SCREEN_P1_X := Ceil( AC2SC(  LOST_SCREEN_P1_X, 0) )
+    global LOST_SCREEN_P1_Y := Ceil( AC2SC(  LOST_SCREEN_P1_Y, 1) )
+    global LOST_SCREEN_P2_X := Ceil( AC2SC(  LOST_SCREEN_P2_X, 0) )
+    global LOST_SCREEN_P2_Y := Ceil( AC2SC(  LOST_SCREEN_P2_Y, 1) )
+    global LOST_SCREEN_P3_X := Ceil( AC2SC(  LOST_SCREEN_P3_X, 0) )
+    global LOST_SCREEN_P3_Y := Ceil( AC2SC(  LOST_SCREEN_P3_Y, 1) )
+    global LOST_SCREEN_P4_X := Ceil( AC2SC(  LOST_SCREEN_P4_X, 0) )
+    global LOST_SCREEN_P4_Y := Ceil( AC2SC(  LOST_SCREEN_P4_Y, 1) )
     global BTN_TRY_AGAIN_X := Ceil( AC2SC(  BTN_TRY_AGAIN_X, 0) )
     global BTN_TRY_AGAIN_Y := Ceil( AC2SC(  BTN_TRY_AGAIN_Y, 1) )
     ;
-    global HOME_SCREEN_1_X := Ceil( AC2SC( HOME_SCREEN_1_X, 0) )
-    global HOME_SCREEN_1_Y := Ceil( AC2SC( HOME_SCREEN_1_Y, 1) )
-    global HOME_SCREEN_2_X := Ceil( AC2SC( HOME_SCREEN_2_X, 0) )
-    global HOME_SCREEN_2_Y := Ceil( AC2SC( HOME_SCREEN_2_Y, 1) )
-    global HOME_SCREEN_3_X := Ceil( AC2SC( HOME_SCREEN_3_X, 0) )
-    global HOME_SCREEN_3_Y := Ceil( AC2SC( HOME_SCREEN_3_Y, 1) )
-    global HOME_SCREEN_4_X := Ceil( AC2SC( HOME_SCREEN_4_X, 0) )
-    global HOME_SCREEN_4_Y := Ceil( AC2SC( HOME_SCREEN_4_Y, 1) )
+    global HOME_SCREEN_P1_X := Ceil( AC2SC( HOME_SCREEN_P1_X, 0) )
+    global HOME_SCREEN_P1_Y := Ceil( AC2SC( HOME_SCREEN_P1_Y, 1) )
+    global HOME_SCREEN_P2_X := Ceil( AC2SC( HOME_SCREEN_P2_X, 0) )
+    global HOME_SCREEN_P2_Y := Ceil( AC2SC( HOME_SCREEN_P2_Y, 1) )
+    global HOME_SCREEN_P3_X := Ceil( AC2SC( HOME_SCREEN_P3_X, 0) )
+    global HOME_SCREEN_P3_Y := Ceil( AC2SC( HOME_SCREEN_P3_Y, 1) )
+    global HOME_SCREEN_P4_X := Ceil( AC2SC( HOME_SCREEN_P4_X, 0) )
+    global HOME_SCREEN_P4_Y := Ceil( AC2SC( HOME_SCREEN_P4_Y, 1) )
     ;
-    global FRIEND_SCREEN_1_X := Ceil( AC2SC( FRIEND_SCREEN_1_X, 0) )
-    global FRIEND_SCREEN_1_Y := Ceil( AC2SC( FRIEND_SCREEN_1_Y, 1) )
-    global FRIEND_SCREEN_2_X := Ceil( AC2SC( FRIEND_SCREEN_2_X, 0) )
-    global FRIEND_SCREEN_2_Y := Ceil( AC2SC( FRIEND_SCREEN_2_Y, 1) )
-    global FRIEND_SCREEN_3_X := Ceil( AC2SC( FRIEND_SCREEN_3_X, 0) )
-    global FRIEND_SCREEN_3_Y := Ceil( AC2SC( FRIEND_SCREEN_3_Y, 1) )
-    global FRIEND_SCREEN_4_X := Ceil( AC2SC( FRIEND_SCREEN_4_X, 0) )
-    global FRIEND_SCREEN_4_Y := Ceil( AC2SC( FRIEND_SCREEN_4_Y, 1) )
+    global FRIEND_SCREEN_P1_X := Ceil( AC2SC( FRIEND_SCREEN_P1_X, 0) )
+    global FRIEND_SCREEN_P1_Y := Ceil( AC2SC( FRIEND_SCREEN_P1_Y, 1) )
+    global FRIEND_SCREEN_P2_X := Ceil( AC2SC( FRIEND_SCREEN_P2_X, 0) )
+    global FRIEND_SCREEN_P2_Y := Ceil( AC2SC( FRIEND_SCREEN_P2_Y, 1) )
+    global FRIEND_SCREEN_P3_X := Ceil( AC2SC( FRIEND_SCREEN_P3_X, 0) )
+    global FRIEND_SCREEN_P3_Y := Ceil( AC2SC( FRIEND_SCREEN_P3_Y, 1) )
+    global FRIEND_SCREEN_P4_X := Ceil( AC2SC( FRIEND_SCREEN_P4_X, 0) )
+    global FRIEND_SCREEN_P4_Y := Ceil( AC2SC( FRIEND_SCREEN_P4_Y, 1) )
     ;
     global HOME_ICON_P1_X :=	Ceil( AC2SC(HOME_ICON_P1_X, 0) )
     global HOME_ICON_P1_Y :=	Ceil( AC2SC(HOME_ICON_P1_Y, 1) )
@@ -623,6 +707,9 @@ InitGeneralCoords() {
     ;
     global RIVER_DETECT_REF_X := Ceil( AC2SC(RIVER_DETECT_REF_X, 0) )
     global RIVER_DETECT_Y     := Ceil( APP_SCALE*RIVER_DETECT_Y )            ; Scale Y according to game area!
+
+    global RIVER_UPPER_REF_Y     := Ceil( APP_SCALE*RIVER_UPPER_REF_Y )            ; Scale Y according to game area!
+    global RIVER_LOWER_REF_Y     := Ceil( APP_SCALE*RIVER_LOWER_REF_Y )            ; Scale Y according to game area!
     ;
     global SCREEN_SERVER_OFFLINE_P1_X := Ceil( AC2SC( SCREEN_SERVER_OFFLINE_P1_X, 0) )
     global SCREEN_SERVER_OFFLINE_P1_Y := Ceil( AC2SC( SCREEN_SERVER_OFFLINE_P1_Y, 1) )
@@ -648,17 +735,37 @@ SHOP_ALIGNMENT_REF_X := 288
 SHOP_ALIGNMENT_REF_Y := 215
 SHOP_ALIGNMENT_REF_C := 0xC79285
 SHOP_ALIGNMENT_DIFF_X := 19
-; Recognition of items in shop slots
-SHOP_SLOT_1_PRICETAG_X   := 179      ; In app window coords.
-SHOP_SLOT_1_PRICETAG_Y   := 356      ; In app window coords.
-SHOP_SLOT_1_PRICETAG_C   := 0xFFF8B8 ; Yellow color on the price tag, bottom corner.
-; For slot 1
-SHOP_EMPTY_P1_X      := 170
-SHOP_EMPTY_P1_Y      := 269
-SHOP_EMPTY_P1_C      := 0xEDCC40
-SHOP_EMPTY_P2_X      := 164
-SHOP_EMPTY_P2_Y      := 358
-SHOP_EMPTY_P2_C      := 0xE4B53C
+; Recognition of items in shop slots ; For slot 1
+; Good on sale must leave the area where the ad is, free.
+SHOP_SLOT_ON_SALE_P1_X :=	187 ;179         ; Pricetag left top corner. (The 187 is lower left corner, it is more free when high price.)
+SHOP_SLOT_ON_SALE_P1_Y :=	400 ;356
+SHOP_SLOT_ON_SALE_P1_C :=	0xFFF8B8
+SHOP_SLOT_ON_SALE_P2_X :=	268         ; Center of the coin.
+SHOP_SLOT_ON_SALE_P2_Y :=	349
+SHOP_SLOT_ON_SALE_P2_C :=	0xFFED53
+SHOP_SLOT_ON_SALE_P3_X :=	190         ; Top drawer
+SHOP_SLOT_ON_SALE_P3_Y :=	223
+SHOP_SLOT_ON_SALE_P3_C :=	0xEEBA43
+SHOP_SLOT_ON_SALE_P4_X :=	217         ; Bottom drawer right
+SHOP_SLOT_ON_SALE_P4_Y :=	416
+SHOP_SLOT_ON_SALE_P4_C :=	0xECB141
+;
+SHOP_SLOT_1_PRICETAG_X := 187
+SHOP_SLOT_1_PRICETAG_Y := 400
+SHOP_SLOT_1_PRICETAG_C := 0xFFF8B8
+;
+SHOP_SLOT_EMPTY_P1_X :=	188             ; Center under
+SHOP_SLOT_EMPTY_P1_Y :=	399
+SHOP_SLOT_EMPTY_P1_C :=	0xF0CA5A
+SHOP_SLOT_EMPTY_P2_X :=	168             ; Lower center left
+SHOP_SLOT_EMPTY_P2_Y :=	368
+SHOP_SLOT_EMPTY_P2_C :=	0xE2AF3B
+SHOP_SLOT_EMPTY_P3_X :=	209             ; Lower center right
+SHOP_SLOT_EMPTY_P3_Y :=	368
+SHOP_SLOT_EMPTY_P3_C :=	0xE2AD3A
+SHOP_SLOT_EMPTY_P4_X :=	209             ; Upper center right
+SHOP_SLOT_EMPTY_P4_Y :=	266
+SHOP_SLOT_EMPTY_P4_C :=	0xE9C740
 ;
 SHOP_DRAG_Y         := 435      ; Area below items to drag scroll.
 SHOP_DRAG_DB        := 25       ; There is a deadband before the slots are moved. Varies, make sure high enough.
@@ -667,12 +774,19 @@ SHOP_DRAG_REV_P1_X  := 172
 SHOP_DRAG_REV_P1_Y  := 211  
 SHOP_DRAG_REV_C     := 0xC79376 ; Shop purple/brown bg at the top (not the same in all y)
 ; My item is sold - check these points (made for slot 1)
-SHOP_SOLD_P1_X      := 159
-SHOP_SOLD_P1_Y      := 265
-SHOP_SOLD_P1_C      := 0xFFF8B8
-SHOP_SOLD_P2_X      := 185
-SHOP_SOLD_P2_Y      := 291
-SHOP_SOLD_P2_C      := 0xC18820
+SHOP_SLOT_SOLD_P1_X :=	166             ; In yellow left of chicken
+SHOP_SLOT_SOLD_P1_Y :=	265
+SHOP_SLOT_SOLD_P1_C :=	0xFFF8B8
+SHOP_SLOT_SOLD_P2_X :=	181             ; Inside chicken
+SHOP_SLOT_SOLD_P2_Y :=	292
+SHOP_SLOT_SOLD_P2_C :=	0xC48821
+SHOP_SLOT_SOLD_P3_X :=	193             ; Inside chicken
+SHOP_SLOT_SOLD_P3_Y :=	285
+SHOP_SLOT_SOLD_P3_C :=	0xC9942D
+SHOP_SLOT_SOLD_P4_X :=	214             ; In yellow right of chicken
+SHOP_SLOT_SOLD_P4_Y :=	251
+SHOP_SLOT_SOLD_P4_C :=	0xFDF4B1
+
 ; Recognition of items in shop slots
 SHOP_SLOT_CORN_P1_X :=	233
 SHOP_SLOT_CORN_P1_Y :=	291
@@ -742,26 +856,43 @@ InitShopCoords() {
     global SHOP_ALIGNMENT_REF_X     := Ceil( AC2SC(SHOP_ALIGNMENT_REF_X, 0) )
     global SHOP_ALIGNMENT_REF_Y     := Ceil( AC2SC(SHOP_ALIGNMENT_REF_Y, 1) )
     global SHOP_ALIGNMENT_DIFF_X    := Ceil( APP_SCALE*SHOP_ALIGNMENT_DIFF_X ) 
-    ;      
-    global SHOP_SLOT_1_PRICETAG_X   := Ceil( AC2SC(SHOP_SLOT_1_PRICETAG_X, 0) )  
-    global SHOP_SLOT_1_PRICETAG_Y   := Ceil( AC2SC(SHOP_SLOT_1_PRICETAG_Y, 1) )    
     ;
-    global SHOP_EMPTY_P1_X      := Ceil( AC2SC(SHOP_EMPTY_P1_X, 0) )
-    global SHOP_EMPTY_P1_Y      := Ceil( AC2SC(SHOP_EMPTY_P1_Y, 1) )
-    global SHOP_EMPTY_P2_X      := Ceil( AC2SC(SHOP_EMPTY_P2_X, 0) )
-    global SHOP_EMPTY_P2_Y      := Ceil( AC2SC(SHOP_EMPTY_P2_Y, 1) )
+    global SHOP_SLOT_ON_SALE_P1_X   := Ceil( AC2SC(SHOP_SLOT_ON_SALE_P1_X, 0) )
+    global SHOP_SLOT_ON_SALE_P1_Y   := Ceil( AC2SC(SHOP_SLOT_ON_SALE_P1_Y, 1) )
+    global SHOP_SLOT_ON_SALE_P2_X   := Ceil( AC2SC(SHOP_SLOT_ON_SALE_P2_X, 0) )
+    global SHOP_SLOT_ON_SALE_P2_Y   := Ceil( AC2SC(SHOP_SLOT_ON_SALE_P2_Y, 1) )
+    global SHOP_SLOT_ON_SALE_P3_X   := Ceil( AC2SC(SHOP_SLOT_ON_SALE_P3_X, 0) )
+    global SHOP_SLOT_ON_SALE_P3_Y   := Ceil( AC2SC(SHOP_SLOT_ON_SALE_P3_Y, 1) )
+    global SHOP_SLOT_ON_SALE_P4_X   := Ceil( AC2SC(SHOP_SLOT_ON_SALE_P4_X, 0) )
+    global SHOP_SLOT_ON_SALE_P4_Y   := Ceil( AC2SC(SHOP_SLOT_ON_SALE_P4_Y, 1) )
     ;
+    global SHOP_SLOT_1_PRICETAG_X   := Ceil( AC2SC(SHOP_SLOT_1_PRICETAG_X, 0) )
+    global SHOP_SLOT_1_PRICETAG_Y   := Ceil( AC2SC(SHOP_SLOT_1_PRICETAG_Y, 1) )
+    ;
+    global SHOP_SLOT_EMPTY_P1_X :=	Ceil( AC2SC(SHOP_SLOT_EMPTY_P1_X, 0) )
+    global SHOP_SLOT_EMPTY_P1_Y :=	Ceil( AC2SC(SHOP_SLOT_EMPTY_P1_Y, 1) )
+    global SHOP_SLOT_EMPTY_P2_X :=	Ceil( AC2SC(SHOP_SLOT_EMPTY_P2_X, 0) )
+    global SHOP_SLOT_EMPTY_P2_Y :=	Ceil( AC2SC(SHOP_SLOT_EMPTY_P2_Y, 1) )
+    global SHOP_SLOT_EMPTY_P3_X :=	Ceil( AC2SC(SHOP_SLOT_EMPTY_P3_X, 0) )
+    global SHOP_SLOT_EMPTY_P3_Y :=	Ceil( AC2SC(SHOP_SLOT_EMPTY_P3_Y, 1) )
+    global SHOP_SLOT_EMPTY_P4_X :=	Ceil( AC2SC(SHOP_SLOT_EMPTY_P4_X, 0) )
+    global SHOP_SLOT_EMPTY_P4_Y :=	Ceil( AC2SC(SHOP_SLOT_EMPTY_P4_Y, 1) )
+    ;    
     global SHOP_DRAG_Y         := Ceil( AC2SC(SHOP_DRAG_Y, 1) )
     global SHOP_DRAG_DB        := Ceil( APP_SCALE*SHOP_DRAG_DB )
     global SHOP_DRAG_REV_X     := Ceil( APP_SCALE*SHOP_DRAG_REV_X )
     global SHOP_DRAG_REV_P1_X  := Ceil( AC2SC(SHOP_DRAG_REV_P1_X, 0) )  
     global SHOP_DRAG_REV_P1_Y  := Ceil( AC2SC(SHOP_DRAG_REV_P1_Y, 1) )  
     ;
-    global SHOP_SOLD_P1_X      := Ceil( AC2SC(SHOP_SOLD_P1_X, 0) ) 
-    global SHOP_SOLD_P1_Y      := Ceil( AC2SC(SHOP_SOLD_P1_Y, 1) ) 
-    global SHOP_SOLD_P2_X      := Ceil( AC2SC(SHOP_SOLD_P2_X, 0) ) 
-    global SHOP_SOLD_P2_Y      := Ceil( AC2SC(SHOP_SOLD_P2_Y, 1) ) 
-    ;
+    global SHOP_SLOT_SOLD_P1_X := Ceil( AC2SC(SHOP_SLOT_SOLD_P1_X, 0) )
+    global SHOP_SLOT_SOLD_P1_Y := Ceil( AC2SC(SHOP_SLOT_SOLD_P1_Y, 1) )
+    global SHOP_SLOT_SOLD_P2_X := Ceil( AC2SC(SHOP_SLOT_SOLD_P2_X, 0) )
+    global SHOP_SLOT_SOLD_P2_Y := Ceil( AC2SC(SHOP_SLOT_SOLD_P2_Y, 1) )
+    global SHOP_SLOT_SOLD_P3_X := Ceil( AC2SC(SHOP_SLOT_SOLD_P3_X, 0) )
+    global SHOP_SLOT_SOLD_P3_Y := Ceil( AC2SC(SHOP_SLOT_SOLD_P3_Y, 1) )
+    global SHOP_SLOT_SOLD_P4_X := Ceil( AC2SC(SHOP_SLOT_SOLD_P4_X, 0) )
+    global SHOP_SLOT_SOLD_P4_Y := Ceil( AC2SC(SHOP_SLOT_SOLD_P4_Y, 1) )
+    ;    
     global SHOP_SLOT_CORN_P1_X := Ceil( AC2SC(SHOP_SLOT_CORN_P1_X, 0) )
     global SHOP_SLOT_CORN_P1_Y := Ceil( AC2SC(SHOP_SLOT_CORN_P1_Y, 1) )
     global SHOP_SLOT_CORN_P2_X := Ceil( AC2SC(SHOP_SLOT_CORN_P2_X, 0) )
@@ -1013,6 +1144,21 @@ SICKLE_DETECT_P2_X := -144
 SICKLE_DETECT_P2_Y := -58
 SICKLE_DETECT_P3_X := -125
 SICKLE_DETECT_P3_Y := -79
+
+SICKLE_DETECT_P1_X :=	-93         ; Arrow
+SICKLE_DETECT_P1_Y :=	-10
+SICKLE_DETECT_P1_C :=	0xF3A500	
+SICKLE_DETECT_P2_X :=	-93         ; Arrow (duplicate)
+SICKLE_DETECT_P2_Y :=	-10
+SICKLE_DETECT_P2_C :=	0xF3A500	
+SICKLE_DETECT_P3_X :=	-147        ; Sickle
+SICKLE_DETECT_P3_Y :=	-58
+SICKLE_DETECT_P3_C :=	0xE0DFE5	
+SICKLE_DETECT_P4_X :=	-139    ; Sickle
+SICKLE_DETECT_P4_Y :=	-73
+SICKLE_DETECT_P4_C :=	0xF5F6F8	
+
+
 ; Detection of progress bar for maturing crops, relative to the clicked field.
 CROP_PROGRESS_P1_X :=	-141
 CROP_PROGRESS_P1_Y :=	169
@@ -1057,6 +1203,8 @@ InitCropCoords() {
     global SICKLE_DETECT_P2_Y := Ceil( APP_SCALE*SICKLE_DETECT_P2_Y )
     global SICKLE_DETECT_P3_X := Ceil( APP_SCALE*SICKLE_DETECT_P3_X )
     global SICKLE_DETECT_P3_Y := Ceil( APP_SCALE*SICKLE_DETECT_P3_Y )
+    global SICKLE_DETECT_P4_X := Ceil( APP_SCALE*SICKLE_DETECT_P4_X )
+    global SICKLE_DETECT_P4_Y := Ceil( APP_SCALE*SICKLE_DETECT_P4_Y )
     ;
     global CROP_PROGRESS_P1_X := Ceil( APP_SCALE*CROP_PROGRESS_P1_X )
     global CROP_PROGRESS_P1_Y := Ceil( APP_SCALE*CROP_PROGRESS_P1_Y )
@@ -1155,6 +1303,7 @@ Gui, Add, Text, vGuiTxtRow17, %msgInitRow%
 Gui, Add, Text, vGuiTxtRow18, %msgInitRow%
 Gui, Add, Text, vGuiTxtRow19, %msgInitRow%
 Gui, Add, Text, vGuiTxtMode, %msgInitRow%       ; Current mode.
+Gui, Add, Text, vGuiTxtStep, %msgInitRow%       ; Current step.
 Gui, Add, Text, vGuiTxtFunc0, %msgInitRow%      ; Output from First called function.
 Gui, Add, Text, vGuiTxtFunc1, %msgInitRow%
 Gui, Add, Text, vGuiTxtFunc2, %msgInitRow%
@@ -1226,6 +1375,8 @@ GAME_AREA_TOP_LEFT_Y := APP_TOP_LEFT_Y + APP_HEADER_Y
 InitAllCoords()
 screenInitialised := true
 
+allowTick := true
+
 ; 
 msg := "Center field px: " . g_CenterFieldScreenCoords_X . ", " . g_CenterFieldScreenCoords_Y
 msg := msg . " field: " . g_RC_CenterField[1] . ", " . g_RC_CenterField[2]
@@ -1276,46 +1427,6 @@ MsgBox 0, HAY DAY HELPER, %msg%
 ;  2.2, 1.0, 0.43      Reddish, as on the boat.
 ;  172.7, 0.36, 0.45   Boat shadow in river - Too similar to river except on Value.
 ;  191, 0.53, 0.4      -"-
-Convert_RGBHSV(rgb_col) {
-    dbgEnable := false
-    dbgHeader := "Convert_RGBHSV"
-
-    colarr := ColToArr(rgb_col)
-    R := colarr[1] / 255.0
-    G := colarr[2] / 255.0
-    B := colarr[3] / 255.0
-
-    if (R>G) {
-        if (R>B)                                               ;                max=R
-        {
-            MIN:=B<G ? B : G
-            V:=R
-            H:=Mod((G-B)/(V-MIN)*60+360,360)                     ;hue
-        } 
-        else {
-            MIN:=R<G ? R : G
-            V:=B
-            H:=(V=MIN ? 0 : (R-G)/(V-MIN)*60+240)                ;hue
-        }
-    } 
-    else {
-        if (G>B) {
-            MIN:=B<R ? B : R
-            V:=G
-            H:=Mod((B-R)/(V-MIN)*60+120,360)                     ;hue
-        } 
-        else {
-            MIN := R<G ? R : G
-            V := B
-            H := (V=MIN ? 0 : (R-G)/(V-MIN)*60+240)                ;hue
-        }
-    }
-
-    S := (V=0 ? 0 : (V-MIN)/V)                                 ;     saturation
-
-    return [H, S, V]
-}
-
 
 
 
@@ -1328,6 +1439,20 @@ Convert_RGBHSV(rgb_col) {
     Msgbox,,,Quit, 2
     ExitApp
 ; ----------------------------------------------------------
+
+
+; shift+z - present pixel color
++z::
+    MouseGetPos, x, y
+    PixelGetColor, col, x, y, RGB
+    hsv := Convert_RGBHSV(col)
+    carr := ColToArr(col)
+    msg := "RGB: " . carr[1] . " " . carr[2] . " " . carr[3] . "`n"
+    msg := msg . "HSV: " . hsv[1] . " " . hsv[2] . " " . hsv[3]
+    MsgBox,,,%msg%
+    return
+; ----------------------------------------------------------
+
 
 ;
 ;ctrl+shift+b : Buy all corn from current shop
@@ -1400,6 +1525,82 @@ Convert_RGBHSV(rgb_col) {
 ; ----------------------------------------------------------
 
 
+; ctrl+shift+w compare 2 colors using similar, to see result
+^+w::
+    Msgbox, Move mouse to Color 1 then press Enter
+    MouseGetPos, mx, my
+    PixelGetColor, col1, mx, my, RGB
+    
+    Msgbox, Move mouse to Color 2 then press Enter
+    MouseGetPos, mx, my
+    PixelGetColor, col2, mx, my, RGB
+
+    res := IsAlmostSameColor(col1, col2)
+    msg := col1 . "`n"
+    msg := msg . col2 . "`n"
+    msg := msg . res
+    MsgBox,, Similar, %msg%    
+    return
+; ----------------------------------------------------------
+
+
+; ctrl+shift+c place mouse on ground commercial, watches all.
+^+c::
+    MouseGetPos, x, y
+    res := WatchCommercialFromPos([x,y])
+    msg := "WatchCommercialFromPos: " . res
+    MsgBox,,,%res%
+    return
+; ----------------------------------------------------------
+
+
+; Key / Mouse event start stops a global timer.
+; All in "button" scope is global.
+^+m::       ; ctrl+shft+m
+    ; För att kunna använda en variabel så börja med ett % i anropet.
+    ; Program will wait at the msgbox
+    ; Msgbox with Abort/RetryIgnore + Exclamation but subtract 16 means Question, and timeout of 3 sec.
+    if (!active) {
+        ; Verify home screen (coords need to be initialised before this)
+        if ( IsScreenHome() > 0 ) {
+            ; This will start once the msgbox is clicked or gone 
+            SetTimer, MyTimerTick, %TICK_TIME_MS%
+
+            ; -------------------------------------------------
+            ; Mode control init
+            tempTime := A_Now
+
+            ; Allow for advertising
+            nextRunTimeForAdvert := tempTime
+
+            ; Allow for harvest and sell
+            nextRunTimeForFarming := tempTime
+            ; -------------------------------------------------
+
+            active := true
+            mode := MODE_NONE
+            mode_old := MODE_NONE
+
+            snipingErrors := 0
+
+            ; Welcome msg box that will auto close
+            msgBoxOpt := 2+48
+            MsgBox,,APP INFO,Helper status: STARTED, 1
+        }
+        else {
+            MsgBox,,APP INFO,Start manually when you are in home screen.
+        }
+    }
+    else {
+        ; Button pressed while script was acitve. Stop script.
+        active := false
+        SetTimer, MyTimerTick, Off
+        MsgBox,,APP INFO,Helper status: paused, 1
+    }
+    return
+; ----------------------------------------------------------
+
+
 ;
 ; ctrl+shift+a - For various testing
 ^+a::
@@ -1408,10 +1609,80 @@ Convert_RGBHSV(rgb_col) {
         return
     }
 
-    InitialiseScrenCoordinates(1)
+    res := Helper_IsShopSlotOnSale( 2, -3 )
+    MsgBox,,,%res%
+    return
+
+
+    res := ShopScrollSlots( 3 )
+    if ( res[1] >= 0 ) {
+        MouseMoveDLL([SHOP_SLOT_1_X + res[2], SHOP_SLOT_1_Y])
+    }
+    alignment := res[2]
+    msg := "drag result: " . res[1] . ", drag align: " . res[2]
+    msgbox,,,%msg%
+
+    screenSlot := 0
+    loop, 4 {
+        screenSlot++
+        slotStatus := ShopGetMyItemStatusForSlot( screenSlot, alignment )
+        msg := "slotstatus: " . screenSlot . ": " . slotStatus
+        MsgBox,,,%msg%
+    }
+    return
+
+    ScrollToFriend( 15 )
+    return
+
+    ScrollFriendSlots( 3 )
+    return
+
+    MouseGetPos, x, y
+    res := SelectPlantOverlayScreenForCrop( [x,y], ITEM_ID_CORN )
+    msg := "SelectPlantOverlayScreenForCrop: " . res
+    MsgBox,,,%msg%
+    return    
+    
+    
+    MouseGetPos, x, y
+    res := IsSickleOnOverlay([x, y])
+    msg := "IsSickleOnOverlay: " . res
+    MsgBox,,,%msg%
+    return
+
+    if ( IsScreenSiloBarnFull() > 0 ) {
+        CloseScreenSiloBarnFull()
+    }
+    return
+
+    res := IsScreenSiloBarnFull()
+    MsgBox,,,%res%
+    return
+
+
+    GetRiverGrassEdgeBinSearch(20.0, RIVER_UPPER_REF_Y)
+    return
+
+    MouseGetPos, x, y
+    GridPressAroundShopPos([x,y], 5, 0)
+    return
+
+    res := ScrollToFriend(8)
+    msg := "ScrollToFriend: " . res
+    msgbox,,,%res%
+    return
+
+
+    InitialiseScrenCoordinates(1, 1.01)
     res := DragFieldToCenter(RC_PLANT_RIGHT_OF_MANSION)
     msg := "DragFieldToCenter: " . res
     msgbox,,,%res%
+    return
+
+
+    res := IsScreenMansion()
+    MsgBox,,,%res%
+    CloseScreenMansion()
     return
 
 
@@ -1517,11 +1788,6 @@ Convert_RGBHSV(rgb_col) {
     return
 
 
-    ; MouseGetPos, x, y
-    ; res := IsSickleOnOverlay([x, y])
-    ; msg := "IsSickleOnOverlay: " . res
-    ; MsgBox,,,%msg%
-    ; return
 
     ; Transform adds.
     ; coords := TransformRowColDiffCoord([-2, -7])
@@ -1900,7 +2166,7 @@ Convert_RGBHSV(rgb_col) {
     ; res := EnterFriendShop( 12 )
     ; return
 
-    ; res := FriendScrollToSlot(12)
+    ; res := ScrollToFriend(12)
     ; MsgBox,,,%res%
     ; return
 
@@ -1932,74 +2198,6 @@ Convert_RGBHSV(rgb_col) {
     return
 ; ----------------------------------------------------------
 
-; ctrl+shift+w compare 2 colors using similar, to see result
-^+w::
-    Msgbox, Move mouse to Color 1 then press Enter
-    MouseGetPos, mx, my
-    PixelGetColor, col1, mx, my, RGB
-    
-    Msgbox, Move mouse to Color 2 then press Enter
-    MouseGetPos, mx, my
-    PixelGetColor, col2, mx, my, RGB
-
-    res := IsAlmostSameColor(col1, col2)
-    msg := col1 . "`n"
-    msg := msg . col2 . "`n"
-    msg := msg . res
-    MsgBox,, Similar, %msg%    
-    return
-; ----------------------------------------------------------
-
-
-
-; Key / Mouse event start stops a global timer.
-; All in "button" scope is global.
-^+m::       ; ctrl+shft+m
-    ; För att kunna använda en variabel så börja med ett % i anropet.
-    ; Program will wait at the msgbox
-    ; Msgbox with Abort/RetryIgnore + Exclamation but subtract 16 means Question, and timeout of 3 sec.
-    if (!active) {
-        ; Verify home screen (coords need to be initialised before this)
-        if ( IsScreenHome() > 0 ) {
-            ; This will start once the msgbox is clicked or gone 
-            SetTimer, MyTimerTick, %TICK_TIME_MS%
-
-            ; -------------------------------------------------
-            ; Mode control init
-            tempTime := A_Now
-
-            ; Allow for advertising
-            nextRunTimeForAdvert := tempTime
-
-            ; Allow for harvest and sell
-            nextRunTimeForFarming := tempTime
-            ; -------------------------------------------------
-
-            active := true
-            mode := MODE_NONE
-            mode_old := MODE_NONE
-
-            snipingErrors := 0
-
-            ; Welcome msg box that will auto close
-            msgBoxOpt := 2+48
-            MsgBox,,APP INFO,Helper status: STARTED, 1
-        }
-        else {
-            MsgBox,,APP INFO,Start manually when you are in home screen.
-        }
-    }
-    else {
-        ; Button pressed while script was acitve. Stop script.
-        active := false
-        SetTimer, MyTimerTick, Off
-        MsgBox,,APP INFO,Helper status: paused, 1
-    }
-    return
-; ------------------------------------------------------------------------------------------------
-
-
-
 
 
 ; ------------------------------------------------------------------------------------------------
@@ -2012,6 +2210,12 @@ guiTimer:
     return
 ; ------------------------------------------------------------------------------------------------
 
+P1_X :=	1454
+P1_Y :=	269
+DIFF_X :=	713
+DIFF_Y :=	357
+
+
 
 
 
@@ -2022,6 +2226,11 @@ guiTimer:
 ; Program scan time of about 100 ms.
 ; If timer is On, this will be called even if main thread exits.
 MyTimerTick:
+    if ( !allowTick ) {
+        return
+    }
+
+
     tickCheck := A_TickCount
     timerTicks++
 
@@ -2074,7 +2283,7 @@ MyTimerTick:
     ; Select farming mode.
     ; Harvest timer has elapsed.
     tt := A_Now
-    if ( 1 && mode = MODE_IDLE && (tt >= nextRunTimeForFarming) && !lockedInSnipeMode ) {
+    if ( FORCE_FARM_OR_SNIPE && mode = MODE_IDLE && (tt >= nextRunTimeForFarming) && !lockedInSnipeMode ) {
         dbgEnable := true
         dbgHeader := "MODE_FARMING"
 
@@ -2095,28 +2304,51 @@ MyTimerTick:
     if ( mode = MODE_FARMING ) {
         dbgEnable := true
         dbgHeader := "MODE_FARMING"
+        dbgEnableWait := dbgEnable && true
 
         msg := "Mode: " . ModeName_ToString(mode)
         GuiControl,, GuiTxtMode, %msg%
 
+        msg := "Step: " . farmingStep 
+        GuiControl,, GuiTxtStep, %msg%
+
+        allowTick := false
+
         ; Continue to check steps in the current mode scan. Otherwise go to error handling at the end of the mode.
         continueModeScan := true
 
+
+        ; STEP 0 - Go to shop and sell.
+
         ; XXX
         ; Need an extra sell in between, but it needs its own timer so it can be evenly spaced.
-        res := GoToHomeAndOpenShop()
-        if ( res > 0 ) {
-            SellAllItem(FIELD_CROP_ID, FIELD_CROP_PRICE, FIELD_CROP_PRICE_MOD, FIELD_CROP_PRICE_AD)
-        }
-        else {
-            continueModeScan := false
+        ; Go to shop and sell
+        if ( farmingStep = 0 ) {
+            dbgMsgBox(dbgEnable, dbgHeader, "STEP 0 - Go to shop and sell")
+            dbgWait(dbgEnableWait, dbgHeader, 1000)
+
+            res := GoToHomeAndOpenShop()
+            if ( res > 0 ) {
+                SellAllItem(FIELD_CROP_ID, FIELD_CROP_PRICE, FIELD_CROP_PRICE_MOD, FIELD_CROP_PRICE_AD)
+
+                ; Regardless of result, go to next step.
+                farmingStep := 10
+
+                msg := "Step: " . farmingStep 
+                GuiControl,, GuiTxtStep, %msg%
+            }
+            else {
+                continueModeScan := false
+            }
         }
 
+
+        ; STEP 10 - Initialise screen and scale.
 
         ; When this mode is called we can never be certain about the screen or zoom status, which are necessary 
         ;  to know for farming. Only going to shop to sell allows a quicker alignment to be used.
-        if ( continueModeScan && !plantDone ) {
-            dbgMsgBox(dbgEnable, dbgHeader, "Validate and/or go to home screen.")
+        if ( continueModeScan && farmingStep = 10 ) {
+            dbgMsgBox(dbgEnable, dbgHeader, "STEP 10 - Initialise screen and scale.")
             dbgWait(dbgEnableWait, dbgHeader, 1000)
 
             res := InitialiseScrenCoordinates()
@@ -2126,187 +2358,348 @@ MyTimerTick:
     
                 continueModeScan := false
             }
+            else {
+                farmingStep := 12
+
+                msg := "Step: " . farmingStep 
+                GuiControl,, GuiTxtStep, %msg%
+            }
         }
 
+
+        ; STEP 12 - Drag the select field to center. 
 
         ; Drag the select field to center. Uses global config.
         ; TODO details.
-        if ( continueModeScan && !plantDone ) {
-            DragFieldToCenter( RC_FIELD_AREA_SELECT )
+        if ( continueModeScan && farmingStep = 12 ) {
+            dbgMsgBox(dbgEnable, dbgHeader, "STEP 12 - Drag the select field to center.")
+            dbgWait(dbgEnableWait, dbgHeader, 1000)
+
+            res := DragFieldToCenter( RC_FIELD_AREA_SELECT )
+            if ( res > 0 ) {
+                farmingStep := 15
+
+                msg := "Step: " . farmingStep 
+                GuiControl,, GuiTxtStep, %msg%
+            }
+            else {
+                ; Go back to init screen.
+                farmingStep := 10
+                continueModeScan := false
+
+                msg := "Step: " . farmingStep 
+                GuiControl,, GuiTxtStep, %msg%
+            }
         }
 
 
-        ; Determine status of the reference field, and take appropriate action.
-        if ( continueModeScan && !plantDone ) {
-            dbgMsgBox(dbgEnable, dbgHeader, "Determine status of the reference field, and take appropriate action.")
+        ; STEP 15 - Determine status of the reference field.
+
+        if ( continueModeScan && farmingStep := 15 ) {
+            dbgMsgBox(dbgEnable, dbgHeader, "STEP 15 - Determine status of the reference field.")
+            dbgWait(dbgEnableWait, dbgHeader, 1000)
 
             ; Validate screen, handle errors / retries?
-            if ( !IsScreenHome() ) {
-                dbgMsgBox(true, dbgHeader, "Error: !IsScreenHome()")
-                continueModeScan := false
-            }
+            if ( IsScreenHome() > 0 ) {
+                ; The start position is the "select field", even if it's in the middle of a large field. 
+                ;  Click and deterimne field status.
+                refPos := [g_CenterFieldScreenCoords_X, g_CenterFieldScreenCoords_Y]
 
-            ; The start position is the "select field", even if it's in the middle of a large field. 
-            ;  Click and deterimne field status.
-            refPos := [g_CenterFieldScreenCoords_X, g_CenterFieldScreenCoords_Y]
+                ; Click the field to open the overlay.
+                MouseMoveDLL(refPos)
+                Sleep, 300
+                MouseClick, Left
+                Sleep, 600
 
-            ; Click the field to open the overlay.
-            MouseMoveDLL(refPos)
-            Sleep, 300
-            MouseClick, Left
-            Sleep, 600
+                ; Try a grid pattern for alignment of target pattern.
+                ; TODO Evaluate this. XXX Can lead to an invalid field plant and running out of crops? Happened...
+                n := 1
+                fieldStatus := -1
+                pixelDiff := 2*APP_SCALE
+                loop {
+                    cn := ReturnGridSearchCoord(refPos, pixelDiff, n)
+                    refPos_New := cn[1]
+                    n_New := cn[2]
 
-            ; Try a grid pattern for alignment of target pattern.
-            ; TODO Evaluate this.
-            n := 1
-            fieldStatus := -1
-            pixelDiff := 5*APP_SCALE
-            loop {
-                cn := ReturnGridSearchCoord(refPos, pixelDiff, n)
-                refPos_New := cn[1]
-                n_New := cn[2]
+                    msg := "Trying grid: " . n . "xy: " . refPos_New[1] . ", " . refPos_New[2]
+                    dbgMsgBox(dbgEnable, dbgHeader, msg)
 
-                msg := "Trying grid: " . n . "xy: " . refPos_New[1] . ", " . refPos_New[2]
-                dbgMsgBox(dbgEnable, dbgHeader, msg)
+                    fieldStatus := GetCropOverlayType(refPos_New, MAX_CROP_OVERLAY_SCREEN)
+                    if ( fieldStatus > 0 ) {
+                        ; Valid. Exit.
+                        refPos := refPos_New
+                        break
+                    }
+                    else if ( fieldStatus < 0 ) {
+                        dbgMsgBox(true, dbgHeader, "Error: !IsScreenHome().")
 
-                fieldStatus := GetCropOverlayType(refPos_New, MAX_CROP_OVERLAY_SCREEN)
-                if ( fieldStatus > 0 ) {
-                    ; Valid. Exit.
-                    refPos := refPos_New
-                    break
-                }
-
-                if ( n_New = 0 ) {
-                    break
-                }
-                else {
-                    n++
-                }
-            }
-
-            if ( fieldStatus <= 0 ) {
-                ; Some error, unknown field status.
-                dbgMsgBox(true, dbgHeader, "Error: Unknown field status.")
-                dbgWait(dbgEnableWait, dbgHeader, 5000)
-
-                continueModeScan := false
-            }
-            else if ( fieldStatus = CROP_OVERLAY_PROGRESS_BAR ) {
-                ; Crops not ready yet. 
-                nextRunTimeForFarming := A_Now
-            }
-            else {
-                ; Plant or harvest.
-                if ( fieldStatus = CROP_OVERLAY_SICKLE && !siloBarnFull) {
-                    ; Ready to harvest.
-                    res := HarvestArea(refPos, RC_FIELD_AREA_REL_TOP_LEFT, RC_FIELD_AREA_REL_LOWER_RIGHT)
-                    if ( res < 0 ) {
-                        msg := "Error: HarvestArea: " . res
-                        dbgMsgBox(true, dbgHeader, msg)
-
+                        ; Go back to init screen.
+                        farmingStep := 10
                         continueModeScan := false
+
+                        msg := "Step: " . farmingStep 
+                        GuiControl,, GuiTxtStep, %msg%
                     }
 
-                    ; XXX some bits reset in init mode...
-                    ; After harvest the silo can be full. In this case we will not do any more harvest attempts until cleared.
-                    if ( IsScreenSiloBarnFull() = 1 ) {
-                        siloBarnFull := true
-                        CloseScreenSiloBarnFull()
+                    dbgMsgBox(dbgEnable, dbgHeader, "Trying next coord to click...")
+
+                    if ( n_New = 0 ) {
+                        break
                     }
-
-                    ; Confirm that screen and position was maintained by new click and overlay confirm.
-                    ; Click the field to open the overlay.
-                    MouseMoveDLL(refPos)
-                    Sleep, 300
-                    MouseClick, Left
-                    Sleep, 300
-
-                    fieldStatus := GetCropOverlayType(refPos, MAX_CROP_OVERLAY_SCREEN)
+                    else {
+                        n++
+                    }
                 }
 
-                ; Plant. 
-                ; Separate if-clause to allow plant directly after harvest in same scan.
+                ; Evaluate the field status.
                 if ( fieldStatus <= 0 ) {
                     ; Some error, unknown field status.
                     dbgMsgBox(true, dbgHeader, "Error: Unknown field status.")
+                    dbgWait(dbgEnableWait, dbgHeader, 5000)
+
+                    ; Go back to init screen.
+                    farmingStep := 10
                     continueModeScan := false
+
+                    msg := "Step: " . farmingStep 
+                    GuiControl,, GuiTxtStep, %msg%
+                }
+                else if ( fieldStatus = CROP_OVERLAY_PROGRESS_BAR ) {
+                    ; Crops not ready yet. 
+                    nextRunTimeForFarming := A_Now
+
+                    ; Go back to init screen. TODO - If we have checked all steps, then screen is not changed scale now.
+                    farmingStep := 10
+                    continueModeScan := false
+
+                    msg := "Step: " . farmingStep 
+                    GuiControl,, GuiTxtStep, %msg%
+                }
+                else if ( fieldStatus = CROP_OVERLAY_SICKLE ) {
+                    ; Ready to harvest.
+                    if ( !siloBarnFull ) {
+                        farmingStep := 20
+
+                        msg := "Step: " . farmingStep 
+                        GuiControl,, GuiTxtStep, %msg%
+                    }
+                    else {
+                        ; Go to shop and sell
+                        farmingStep := 100
+
+                        msg := "Step: " . farmingStep 
+                        GuiControl,, GuiTxtStep, %msg%
+                    }
+                }
+                else if ( fieldStatus = CROP_OVERLAY_CROPS ) {
+                    ; Ready to plant.
+                    farmingStep := 25
+
+                    msg := "Step: " . farmingStep 
+                    GuiControl,, GuiTxtStep, %msg%
+                }
+            }
+            else {
+                dbgMsgBox(true, dbgHeader, "Error: !IsScreenHome()")
+
+                ; Go back to init screen.
+                farmingStep := 10
+                continueModeScan := false
+
+                msg := "Step: " . farmingStep 
+                GuiControl,, GuiTxtStep, %msg%
+            }
+        }
+
+
+        ; STEP 20 - Harvest
+
+        if ( continueModeScan && farmingStep = 20 ) {
+            dbgMsgBox(dbgEnable, dbgHeader, "STEP 20 - Harvest.")
+            dbgWait(dbgEnableWait, dbgHeader, 1000)
+
+            ; Ready to harvest.
+            res := HarvestArea(refPos, RC_FIELD_AREA_REL_TOP_LEFT, RC_FIELD_AREA_REL_LOWER_RIGHT)
+            if ( res < 0 ) {
+                msg := "Error: HarvestArea: " . res
+                dbgMsgBox(true, dbgHeader, msg)
+                dbgWait(dbgEnableWait, dbgHeader, 2000)
+
+                ; TODO - Error unknown, so go back to init.
+                farmingStep := 10
+                continueModeScan := false
+
+                msg := "Step: " . farmingStep 
+                GuiControl,, GuiTxtStep, %msg%
+            }
+            else {
+                ; After harvest the silo can be full. In this case we will not do any more harvest attempts until cleared.
+                if ( res = 2 ) {
+                    ; siloBarnFull := true ; XXX
+                    dbgMsgBox(dbgEnable, dbgHeader, "Silo full after harvest.")
+                    dbgWait(dbgEnableWait, dbgHeader, 1000)
+
+                    if ( IsScreenSiloBarnFull() > 0 ) {
+                        dbgMsgBox(dbgEnable, dbgHeader, "CloseScreenSiloBarnFull.")
+                        dbgWait(dbgEnableWait, dbgHeader, 1000)
+
+                        res := CloseScreenSiloBarnFull()
+
+                        dbgMsgBox(dbgEnable, dbgHeader, "Closed.")
+                        dbgWait(dbgEnableWait, dbgHeader, 1000)
+                    }
+                }
+
+                ; Go to plant
+                farmingStep := 25
+
+                msg := "Step: " . farmingStep 
+                GuiControl,, GuiTxtStep, %msg%            
+            }
+
+            ; Verify screen lost.
+            if ( IsScreenHome() <= 0 ) {
+                dbgMsgBox(true, dbgHeader, "Error: !IsScreenHome()")
+
+                ; Go back to init screen.
+                farmingStep := 10
+                continueModeScan := false
+
+                msg := "Step: " . farmingStep 
+                GuiControl,, GuiTxtStep, %msg%
+            }
+        }
+
+
+        ; STEP 25 - Plant
+
+        if ( continueModeScan && farmingStep = 25 ) {
+            ; Ready to plant.
+            dbgMsgBox(dbgEnable, dbgHeader, "STEP 25 - Plant.")
+            dbgWait(dbgEnableWait, dbgHeader, 2000)
+
+            ; Confirm that screen and position was maintained by new click and overlay confirm.
+            ; Click the field to open the overlay. Wait for flying crops to clear.
+            MouseMoveDLL(refPos)
+            Sleep, 1000
+            Click
+            Sleep, 300
+
+            fieldStatus := GetCropOverlayType(refPos, MAX_CROP_OVERLAY_SCREEN)
+
+            if ( fieldStatus = CROP_OVERLAY_CROPS ) {
+                ; Ready to plant.
+                dbgMsgBox(dbgEnable, dbgHeader, "Plant from here.")
+
+                res := PlantArea(refPos, RC_FIELD_AREA_REL_TOP_LEFT, RC_FIELD_AREA_REL_LOWER_RIGHT, FIELD_CROP_ID)
+                if ( res < 0 ) {
+                    msg := "Error: PlantArea: " . res
+                    dbgMsgBox(true, dbgHeader, msg)
+
+                    ; Go back to init screen.
+                    farmingStep := 10
+                    continueModeScan := false
+
+                    msg := "Step: " . farmingStep 
+                    GuiControl,, GuiTxtStep, %msg%
                 }
                 else {
-                    if ( fieldStatus = CROP_OVERLAY_CROPS ) {
-                        ; Ready to plant.
-                        dbgMsgBox(dbgEnable, dbgHeader, "Plant from here.")
-                        res := PlantArea(refPos, RC_FIELD_AREA_REL_TOP_LEFT, RC_FIELD_AREA_REL_LOWER_RIGHT, FIELD_CROP_ID)
-                        if ( res < 0 ) {
-                            msg := "Error: PlantArea: " . res
-                            dbgMsgBox(true, dbgHeader, msg)
+                    plantDone := true
+                    siloBarnFull := false
+                    nextRunTimeForFarming := A_Now
+                    ; nextRunTimeForFarming += 220, seconds   ; Crop mature time minus the overhead time to center screen and move to field.
+                    
+                    ; For using the alwyas start with sell temporary.
+                    nextRunTimeForFarming += 155, seconds   ; 175; Crop mature time minus the overhead time to center screen and move to field.
 
-                            continueModeScan := false
-                        }
-                        else {
-                            plantDone := true
-                            siloBarnFull := false
-                            nextRunTimeForFarming := A_Now
-                            ; nextRunTimeForFarming += 220, seconds   ; Crop mature time minus the overhead time to center screen and move to field.
-                            
-                            ; For using the alwyas start with sell temporary.
-                            nextRunTimeForFarming += 175, seconds   ; Crop mature time minus the overhead time to center screen and move to field.
-                        }
-                    }
-                    else if ( fieldStatus = CROP_OVERLAY_SICKLE ) {
-                        ; The first field to harvest before was apparently never harvested. Silobarnfull?
-                        if ( siloBarnFull ) {
-                            ; TODO.
-                            ;mode := MODE_CREATE_ADVERT
-                            ;continueModeScan := false
-                        }
-                    }
+                    ; Go to shop and sell
+                    farmingStep := 100
+
+                    msg := "Step: " . farmingStep 
+                    GuiControl,, GuiTxtStep, %msg%
                 }
             }
         }
 
 
-        ; Sell in shop always. 
+        ; STEP 100 - Sell in shop always - it will also advertise existing goods. 
+
         ; In theory there could be sold too much, but since the AutoSell can only see the top 8 crops, 
         ;  likely the target crop will still be available afterwards at a low amount.
         ; Problem is more commonly a full inventory and need to check shop often for new sales.
-        if ( true || continueModeScan ) {
-            dbgMsgBox(dbgEnable, dbgHeader, "Sell all item.")
+        if ( true ) {
+            dbgMsgBox(dbgEnable, dbgHeader, "STEP 100 - Post sale.")
+            dbgWait(dbgEnableWait, dbgHeader, 1000)
 
-            plantDone := false
+            if ( farmingStep = 100 ) {
+                dbgMsgBox(dbgEnable, dbgHeader, "Came here on purpose.")
+                dbgWait(dbgEnableWait, dbgHeader, 1000)
+            }
 
-            res := GoToHomeAndOpenShop()
-            if ( res = 1 ) {
-                ; Sell
-                res := SellAllItem(FIELD_CROP_ID, FIELD_CROP_PRICE, FIELD_CROP_PRICE_MOD, FIELD_CROP_PRICE_AD)
-                if ( res >= 1) {
-                    ; Some items were sold
-                    msg := "SellAllItem() sold: " . res
-                    dbgMsgBox(dbgEnable, dbgHeader, msg)
+            ; TODO redo - When releasing mouse then the crop growing can be selected, meaning overlay can
+            ;  cover the shop coordinates so it's not clickable even if it is on screen.
+            if ( farmingStep = 10 || true ) {
+                ; It was determined that the home screen has moved.
+                dbgMsgBox(dbgEnable, dbgHeader, "Taking the long way to shop.")
+                dbgWait(dbgEnableWait, dbgHeader, 1000)
 
-                    siloBarnFull := false
-                }
-                else if ( res = 0 ) {
-                    ; No items sold - full shop. 
-                    ; Advertising an existing item is handled by SellAll, so handle in normal program.
-                    dbgMsgBox(true, dbgHeader, "SellAllItem() no sales.")
-                }
-                else {
-                    ; Error, try again.
-                    dbgMsgBox(true, dbgHeader, "Error: SellAllItem()")
-
-                    continueModeScan := false
-                }
+                res := GoToHomeAndOpenShop()
             }
             else {
-                dbgMsgBox(dbgEnable, dbgHeader, "Sell all item, could not open shop.")
+                ; We can use the field grid coordinates for direct access.
+                cfcoord := [g_CenterFieldScreenCoords_X, g_CenterFieldScreenCoords_Y]
+                coords := GetScreenCoordFromRowCol(RC_SHOP, g_RC_CenterField, cfcoord)
 
+                msg := "coords: " . vec2_toString(coords)
+                dbgMsgBox(dbgEnable, dbgHeader, msg)
+                ; dbgWait(dbgEnableWait, dbgHeader)
+                msg := "cfcoord: " . vec2_toString(cfcoord)
+                dbgMsgBox(dbgEnable, dbgHeader, msg)
+                ; dbgWait(dbgEnableWait, dbgHeader)
+                msg := "RC_SHOP: " . vec2_toString(RC_SHOP)
+                dbgMsgBox(dbgEnable, dbgHeader, msg)
+                ; dbgWait(dbgEnableWait, dbgHeader)
+                msg := "g_RC_CenterField: " . vec2_toString(g_RC_CenterField)
+                dbgMsgBox(dbgEnable, dbgHeader, msg)
+                ; dbgWait(dbgEnableWait, dbgHeader)
+                
+
+                dbgMsgBox(dbgEnable, dbgHeader, "Entering shop without dragging to a reference.")
+                dbgWait(dbgEnableWait, dbgHeader, 1000)
+
+                MouseMoveDLL(coords)
+                Sleep, 100
+                Click
+                Sleep, 500
+
+                res := IsInShop()
+
+                dbgMsgBox(dbgEnable, dbgHeader, "Should be in shop now.")
+                dbgWait(dbgEnableWait, dbgHeader, 1000)
+            }
+
+            ; In shop. Sell.
+            if ( res > 0 ) {
+                res := SellAllItem(FIELD_CROP_ID, FIELD_CROP_PRICE, FIELD_CROP_PRICE_MOD, FIELD_CROP_PRICE_AD)
+            }
+            else {
                 continueModeScan := false
+            }
+
+            ; Modify step only if sent here deliberately
+            if ( farmingStep = 100 ) {
+                farmingStep := 0
+
+                msg := "Step: " . farmingStep 
+                GuiControl,, GuiTxtStep, %msg%
             }
         }
 
 
         ; Exit mode
         ; Release mode when complete
+        allowTick := true
+
         if ( !continueModeScan ) {
             dbgMsgBox(dbgEnable, dbgHeader, "Some error occured. Scheduling next run time directly. Keeping mode.")
             dbgWait(dbgEnableWait, dbgHeader, 1000)
@@ -2354,11 +2747,12 @@ MyTimerTick:
 
     ; -----------------------------------------------------------
     ; Select sniping mode. Currently the default whenever possible.
-    if ( 0 && mode = MODE_IDLE && snipingErrors < MAX_SNIPING_RETRIES && true ) {
+    if ( !FORCE_FARM_OR_SNIPE && mode = MODE_IDLE && snipingErrors < MAX_SNIPING_RETRIES && true ) {
         mode_temp := MODE_SNIPING
 
         dbgEnable := true
         dbgHeader := "MODE_SNIPING"
+        dbgEnableWait := dbgEnable && true
 
         ; Init mode
         if ( mode_old != mode_temp ) {
@@ -2373,8 +2767,11 @@ MyTimerTick:
             lockedInSnipeMode := true   ; When entering mode it is locked until the first snipe 
 
             ; Init code...
+            ; Select friend.
             msg := "friendCycleListIndex: " . friendCycleListIndex
             dbgMsgBox(dbgEnable, dbgHeader, msg)
+            dbgWait(dbgEnableWait, dbgHeader, 1000)
+
             fd := friendCycleList[ friendCycleListIndex ]
             friendIndex := fd[1]
             snipeSlotAbsolute := fd[2]
@@ -2404,7 +2801,7 @@ MyTimerTick:
                         ; Indicate mouse once on slot so user can validate.
                         ;  The actual snipeslot for pressing is calculated once more, beacuse the snipe is
                         ;  "press shop slot"
-                        snipeCoords := GetCoordForShopSlot( snipeSlot )
+                        snipeCoords := Helper_GetClickCoordForShopSlot( snipeSlot )
                         snipeCoords[1] += alignment
                         x := snipeCoords[1]
                         y := snipeCoords[2]
@@ -2415,6 +2812,7 @@ MyTimerTick:
                         continueSniping := true
                         snipeLastStartTime := A_Now
                         enableTrigger := true
+                        firstTimeInShop := true
                         friendLastActiveTime := A_Now
                         friendIdleTime := 0
                         slotColors_mem := SampleShopSlotColors()
@@ -2449,8 +2847,9 @@ MyTimerTick:
 
         ; TODO make step - or not. Steps could release code to main scan, but since some areas should
         ;  be done without risk of screen interrupt, a "locking semaphore would be needed in that case.
+
+        ; Regurarly check if still in shop, every 60s.
         if ( continueSniping ) {
-            ; Regurarly check if still in shop, not necesarily each scan.
             if ( A_Now > shopNextCheckTime ) {
                 dbgMsgBox(dbgEnable, dbgHeader, "A_Now > shopNextCheckTime")
                 shopNextCheckTime += 60, seconds
@@ -2462,70 +2861,120 @@ MyTimerTick:
             }
         }
 
-        ; Check when there is some activity or new sales. Could be the trigger slot but not 
-        ;  used for snipe detection, only activity detec
+        ; Check when there is some activity or new sales. Reset the activity timeout.
         ;  Color match expected to be identical.
         if ( continueSniping ) {
+            detectionAtSnipeSlot := false
+
             slotColors := SampleShopSlotColors()
+            anyChange := false
+            msg := ""
             i := 0
             loop, 4 {
                 i++
                 if ( slotColors[i] != slotColors_mem[i] ) {
-                    msg := "First change detected in screen slot: " . i
-                    slotColors_mem := slotColors
-                    dbgMsgBox(dbgEnable, dbgHeader, msg)
-                    friendLastActiveTime := A_Now
+                    msg := msg . i . ", "
+
+                    anyChange := true
+                    slotColors_mem[i] := slotColors[i]
+
+                    if ( i = snipeSlot ) {
+                        detectionAtSnipeSlot := true
+                        MsgBox,,,detectionAtSnipeSlot,1
+                    }
                 }
             }
+
+            if ( anyChange ) {
+                msgChangeDetect := "Change detected in screen slots: " . msg
+                dbgMsgBox(dbgEnable, dbgHeader, msgChangeDetect)
+
+                friendLastActiveTime := A_Now
+            }
+
             friendIdleTime := A_Now
             friendIdleTime -= friendLastActiveTime, seconds
 
+            ; Change friend shop at inactivity.
             if ( friendIdleTime > 12*60 ) {
-                ; Change friend shop at inactivity.
                 dbgMsgBox(dbgEnable, dbgHeader, "Leaving due to no activity in shop for a long time.")
                 continueSniping := false
             }
-        }
 
-        ; Check how long there has been no snipe since this round started. If > 6 minutes and
-        ;  corn there was no loot this time. Time is varying... 6-8 minutes normal.
-        if ( continueSniping ) {
+            ; Check how long there has been no snipe since this round started. If > 6 minutes and
+            ;  corn there was no loot this time. Time is varying... 6-8 minutes normal.
             snipeTimeDiff := A_Now
             snipeTimeDiff -= snipeLastStartTime, seconds
         }
 
-        ; Check for trigger at the selected snipe position.
+
+        ; Take a closer look at trigger at the selected snipe position.
         ; Trigger: Goods on sale.
         if ( continueSniping ) {
             trigger := false
             if ( enableTrigger ) {
-                trigger := Helper_IsShopSlotGoodsOnSale( snipeSlot, alignment )
+                ; TODO - The default on sale detection is rather slow. Consider a faster, yet safe, detection for snipe.
+                ; On the other hand it is also desired not sniping a known crop.
+                ; Also, to not miss a snipe when entering the shop, the search must be done regardless of change
+                ;  detection.
 
-                if ( trigger ) {
-                    ; Rule out some possibly common false triggers
-                    if ( IsTargetItemAtShopSlot(snipeSlot, ITEM_ID_CORN, alignment) > 0 ) {
-                        dbgMsgBox(dbgEnable, dbgHeader, "Sniping disabled due to corn detection.")
-                        trigger := false
-                        enableTrigger := false
+                ; MsgBox,,,In enable trigger
+                if ( firstTimeInShop || detectionAtSnipeSlot ) {
+                    msg := "In detection / first. Detect: " . detectionAtSnipeSlot . ", first: " . firstTimeInShop . ", align: " . alignment
+                    ; MsgBox,,,%msg%
+                    dbgMsgBox(dbgEnable, dbgHeader, msg)
+
+                    ; First time enter shop check if item is on sale on snipe slot.
+                    if ( firstTimeInShop ) {
+                        ; MsgBox,,,In firstTime
+                        firstTimeInShop := false
+                        trigger := Helper_IsShopSlotOnSale( snipeSlot, alignment )
                     }
-                    else if ( IsTargetItemAtShopSlot(snipeSlot, ITEM_ID_CARROT, alignment) > 0 ) {
-                        dbgMsgBox(dbgEnable, dbgHeader, "Sniping disabled due to carrot detection.")
-                        Sleep, 2000
-                        trigger := false
-                        enableTrigger := false
+                    else if ( detectionAtSnipeSlot ) {
+                        ; Check just one point of the Goods on sale for speed.
+                        x := SHOP_SLOT_ON_SALE_P1_X + (snipeSlot-1)*SHOP_SLOT_DIFF_X + alignment
+                        y := SHOP_SLOT_ON_SALE_P1_Y
+                        PixelGetColor, col, x, y, RGB
+                        trigger := IsAlmostSameColor(col, SHOP_SLOT_ON_SALE_P1_C)
+
+                        ; msg := "tt: " . trigger
+                        ; MsgBox,,,%msg%
                     }
                 }
             } 
             else {
-                ; Re-enable if possible.
+                ; No trigger allowed. Re-enable if possible. It is also enabled when switching shop.
                 if ( IsSoldFriendShopSlot(snipeSlot, alignment) > 0 ) {
                     enableTrigger := true
                     dbgMsgBox(dbgEnable, dbgHeader, "Sniping re-enabled due to item sold.")
                 }
-                else if ( Helper_IsEmptyShopSlot(snipeSlot, alignment) > 0 ) {
+                else if ( Helper_IsShopSlotEmpty(snipeSlot, alignment) > 0 ) {
                     enableTrigger := true
                     dbgMsgBox(dbgEnable, dbgHeader, "Sniping re-enabled due to empty slot.")
                 }                    
+            }
+        }
+
+        ; Cancel the trigger if it is an item not worth sniping.
+        ; NOTE: This increases possibly long time before detection to click.
+        if ( continueSniping ) {
+            if ( trigger ) {
+                dbgMsgBox(dbgEnable, dbgHeader, "Trigger: item on sale. Checking if unbuyable item.")
+
+                ; Log before potential clear.
+                triggerNewItems++
+
+                ; Rule out some possibly common false triggers, and stop looking from now on.
+                if ( IsTargetItemAtShopSlot(snipeSlot, ITEM_ID_CORN, alignment) > 0 ) {
+                    dbgMsgBox(dbgEnable, dbgHeader, "Sniping disabled due to corn detection.")
+                    trigger := false
+                    enableTrigger := false
+                }
+                else if ( IsTargetItemAtShopSlot(snipeSlot, ITEM_ID_CARROT, alignment) > 0 ) {
+                    dbgMsgBox(dbgEnable, dbgHeader, "Sniping disabled due to carrot detection.")
+                    trigger := false
+                    enableTrigger := false
+                }
             }
         }
 
@@ -2573,7 +3022,7 @@ MyTimerTick:
                     ; break
                 }
 
-                ; Sample new reference colors
+                ; Sample new reference colors after the snipe.
                 slotColors_mem := SampleShopSlotColors()
             }
         }
@@ -2594,7 +3043,7 @@ MyTimerTick:
             dbgMsgBox(dbgEnable, dbgHeader, "!continueSniping.")
 
             ; Allow for some time to manually handle snipe, if online..
-            ; TODO - make a "wait" step 
+            ; TODO - make a "wait" step
             dbgMsgBox(dbgEnable, dbgHeader, "Waiting 15s before going back to shop.")
             Sleep, 15000 
 
@@ -2610,19 +3059,23 @@ MyTimerTick:
             msg := "GoToHome result: " . res
             dbgMsgBox(dbgEnable, dbgHeader, msg)
 
+            ; TODO some length check here. A separate list also. One list w all friends. One with current snipes.
+            ; Move to next friend.
+            if ( cycleFriendsAfterSnipe ) {
+                friendCycleListIndex++
+                if ( friendCycleListIndex > frienCycleListSize ) {
+                    friendCycleListIndex := 1
+                }
+                msg := "New friend index: " . friendCycleListIndex
+                dbgMsgBox(dbgEnable, dbgHeader, msg)
+                dbgWait(dbgEnableWait, dbgHeader, 1000)
+            }
+
             ; Release mode when complete
             ; Mode NONE will trigger Init of the sniping mode when re-entered.
             mode := MODE_NONE
         }
 
-        ; TODO some length check here. A separate list also. One list w all friends. One with current snipes.
-        ; Move to next friend.
-        if ( cycleFriendsAfterSnipe ) {
-            friendCycleListIndex++
-            if ( friendCycleListIndex >= 5 ) {
-                friendCycleListIndex := 3
-            }
-        }
 
         ;----------------------------------------------------------------------
         ; Update GUI data.
@@ -2650,23 +3103,25 @@ MyTimerTick:
             msg := "Friend idle time: " . friendIdleTime . " sec."
             GuiControl,, GuiTxtRow5, %msg%
 
-            FormatTime, timeStr,, yyyy-MM-dd HH:mm:ss
-            msg := "Time now: " . timeStr
+            td := A_Now
+            td -= PROGRAM_START_TIME
+            dhms := Convert_secToArrHMS(td)
+            msg := "Script duration: " . dhms[2] . ":" . dhms[3] . ":" . dhms[4]
             GuiControl,, GuiTxtRow6, %msg%
 
-            msg := ""
+            msg := "Snipes / hour: " . snipesDone / (td / 3600)
             GuiControl,, GuiTxtRow7, %msg%
 
             msg := "Locked in mode: " . lockedInSnipeMode
             GuiControl,, GuiTxtRow8, %msg%
 
-            msg := "Mode: " . ModeName_ToString(mode)
+            msg := msgChangeDetect
             GuiControl,, GuiTxtRow9, %msg%
 
-            msg := ""
+            msg := "Sniping slots: " . snipeSlot
             GuiControl,, GuiTxtRow10, %msg%
 
-            msg := ""
+            msg := "Triggers before carrot / corn removal of trigger: " . triggerNewItems
             GuiControl,, GuiTxtRow11, %msg%
 
             tickDiff := A_TickCount
@@ -2676,6 +3131,12 @@ MyTimerTick:
 
             msg := "Elapsed ms since last update: " . elapsedMs
             GuiControl,, GuiTxtRow13, %msg%
+
+            msg := "Trigger Mem: " . slotColors_mem[1] . ", " . slotColors_mem[2] . ", " . slotColors_mem[3] . ", " . slotColors_mem[4]
+            GuiControl,, GuiTxtRow14, %msg%
+
+            msg := "Trigger Col: " . slotColors[1] . ", " . slotColors[2] . ", " . slotColors[3] . ", " . slotColors[4]
+            GuiControl,, GuiTxtRow15, %msg%
         }
         ;----------------------------------------------------------------------
 
@@ -2693,399 +3154,6 @@ MyTimerTick:
     return  ; MyTimerTick
 ; ------------------------------------------------------------------------------------------------
 
-
-
-
-
-
-; ------------------------------------------------------------------------------------------------
-; General functions
-;
-
-
-vec2_sub(v1, v2) {
-    return [v1[1]-v2[1], v1[2]-v2[2]]
-}
-
-
-vec2_add(v1, v2) {
-    return [v1[1]+v2[1], v1[2]+v2[2]]
-}
-
-
-vec2_toString(v) {
-    return "[" . v[1] . ", " . v[2] . "]"
-}
-
-
-; Exact. Not like fucked up AHK MoveMouse.
-; Includes a move to the position and wait before click.
-; 500 ms minimum. TODO - configure delays. At least 200 ms wait before after needed in HayDay.
-MouseDragDLL(startPos, endPos) {
-    start_x := startPos[1]
-    start_y := startPos[2]
-    end_x := endPos[1]
-    end_y := endPos[2]
-
-    dly_0 := 100
-    dly_1 := 100
-    dly_2 := 200
-    dly_3 := 200
-    dly_4 := 0
-    if ( slow ) {
-        dly_0 := 400
-        dly_1 := 400
-        dly_2 := 400
-        dly_3 := 400
-        dly_4 := 200
-    }
-
-    ; Move before clicking.
-    Sleep, dly_0
-    DllCall("SetCursorPos", "int", start_x, "int", start_y)
-    Sleep, dly_1
-
-    ; Click and drag.
-    Click, Down
-    Sleep, dly_2
-
-    DllCall("SetCursorPos", "int", end_x, "int", end_y)
-
-    Sleep, dly_3
-    Click, Up
-
-    Sleep, dly_4
-    return
-}
-
-
-; Exact. Not like fucked up AHK MoveMouse.
-MouseMoveDLL(targetPos) {
-    x := targetPos[1]
-    y := targetPos[2]
-
-    DllCall("SetCursorPos", "int", x, "int", y)
-    return
-}
-
-
-; Convert app coord (including header) to screen coord.
-AC2SC(coord, vector) {
-    global APP_TOP_LEFT_X, APP_TOP_LEFT_Y, APP_SCALE, APP_HEADER_Y
-
-    if (vector = 0) {
-        ; x
-        return coord*APP_SCALE + APP_TOP_LEFT_X
-    }
-    else {
-        ; y
-        return (coord - APP_HEADER_Y)*APP_SCALE + APP_HEADER_Y + APP_TOP_LEFT_Y 
-    }
-}
-
-
-; Returns array of three bytes. Hex but still nbr.
-ColToArr(col) {
-    dbgEnable := false
-    dbgHeader := "ColToArr"
-
-    r := col >> 16
-    g := (col >> 8) & 0x0000FF
-    b := col & 0x0000FF
-
-    if ( dbgEnable ) {
-        msg := r . " " . g . " " . b
-        dbgMsgBox(dbgEnable, dbgHeader, msg)
-    }
-
-    return [r, g, b]
-}
-
-
-; Asserts whether the color is grayscale.
-;
-; Inputs:
-;  color
-IsGrayScale(col) {
-    dbgEnable := true
-    dbgHeader := "IsGrayScale"
-
-    ; Little variance of RGB means gray scale.
-    colArr := ColToArr(col)
-    r := colArr[1]
-    g := colArr[2]
-    b := colArr[3]
-
-    ; Average
-    avg := (r + g + b) / 3
-
-    ; Variance
-    diff := Abs(r-avg)**2 + Abs(g-avg)**2 + Abs(b-avg)**2
-
-    msg := "Color: " . col . " r: " . r . " g: " . g .  " b: " . b . "Diff: " . diff
-    dbgMsgBox(dbgEnable, dbgHeader, msg)
-    
-    if (diff > 20) {
-        return false
-    }
-    return true
-}
-
-
-; Asserts whether the color at a pixel pos is grayscale.
-;
-; Inputs:
-;  [x, y]
-IsGrayScaleAtPos(coords) {
-    dbgEnable := true
-    dbgHeader := "IsGrayScaleAtPos"
-
-    X := coords[1]
-    Y := coords[2]
-
-    PixelGetColor, col, X, Y, RGB
-    return IsGrayScale(col)
-}
-
-
-; Compare two colors and allow for some difference
-;  Uses Hue and Value with same tolerance.
-;
-; Inputs:
-;  color1 RGB
-;  color2 RGB
-;  tolerance %/100
-IsAlmostSameColor(c1, c2, tol := 0.07) {
-    dbgEnable := false
-    dbgHeader := "IsAlmostSameColor"
-    dbgEnableWait := dbgEnable && true
-
-    if ( c1= || c2= ) {
-        msg := "IsAlmostSameColor null parameter"
-        dbgMsgBox(true, dbgHeader, msg)
-    }
-
-    ;--------------
-    ; Judge by hue and value, same tolerance for both.
-    hsv_c1 := Convert_RGBHSV(c1)
-    hsv_c2 := Convert_RGBHSV(c2)
-    diff_h := Abs( Mod((hsv_c1[1] - hsv_c2[1]), 360) ) / 360.0
-    diff_v := Abs(hsv_c1[3] - hsv_c2[3])
-
-    msg := "h1: " . hsv_c1[1] . ", h2: " . hsv_c2[1] . ", diff: " . diff_h . ", Tol: " . tol
-    dbgMsgBox(dbgEnable, dbgHeader, msg)
-    dbgWait(dbgEnableWait, dbgHeader)
-
-    msg := "v1: " . hsv_c1[3] . ", v2: " . hsv_c2[3] . ", diff: " . diff_v . ", Tol: " . tol
-    dbgMsgBox(dbgEnable, dbgHeader, msg)
-    dbgWait(dbgEnableWait, dbgHeader)
-
-    if ( diff_h <= tol && diff_v <= tol ) {
-        return 1
-    }
-    else {
-        return 0
-    }
-    ;--------------
-
-    ; Msgbox,,IsAlmostSameColor,%c1%
-
-    diff := abs(c1-c2)/c1
-
-    c1a := ColToArr(c1)
-    c2a := ColToArr(c2)
-
-    rd := abs( c1a[1]-c2a[1] ) / 256
-    gd := abs( c1a[2]-c2a[2] ) / 256
-    bd := abs( c1a[3]-c2a[3] ) / 256
-
-    diff := ( rd + gd + bd ) / 3
-
-    ;DEBUG
-    msg := "c1: " . c1 . ", c2: " . c2 . ", diff: " . diff . ", Tol: " . tol
-    dbgMsgBox(dbgEnable, dbgHeader, msg)
-    dbgWait(dbgEnableWait, dbgHeader)
-
-    if (diff < tol) {
-        return true
-    }
-    return false
-}
-
-
-; Inputs:
-;  Coords and reference color.
-;
-; Actual color is sampled at coords (blurred) 
-; It was not enough to just use 1 pixel even with tolerance. Black/white...
-IsSimilarFourColor(x1, y1, c1, x2, y2, c2, x3, y3, c3, x4, y4, c4, tol := 0.07) {
-    dbgEnable := false
-    dbgHeader := "IsSimilarFourColor"
-    dbgEnableWait := dbgEnable && true
-
-    if (x1=""||y1=""||c1=""||x2=""||y2=""||c2=""||x3=""||y3=""||c3=""||x4=""||y4=""||c4=""||) {
-        dbgMsgBox(true, dbgHeader, "null parameter.")
-    }
-
-    ; Check colors for screen
-    hits := 0
-    hitsRequired := 4
-
-    ; Blurpixel 
-    b := 1  ; 2 makes it rather slow
-
-    ; PixelGetColor, col, x1, y1, RGB
-    col := Blur( [x1, y1], b)
-    if ( dbgEnable ) {
-        MouseMove, x1, y1
-        dbgWait(dbgEnableWait, dbgHeader, 1000)
-    }
-    if ( IsAlmostSameColor(col, c1, tol) > 0 ) {
-        hits++
-    }
-    if ( dbgEnable ) {
-        msg := "Col, Ref: " . col . ", " c1 . " Total hits: " . hits 
-        dbgMsgBox(dbgEnable, dbgHeader, msg)
-        MouseMove, x1, y1
-    }
-
-    ; PixelGetColor, col, x2, y2, RGB
-    col := Blur( [x2, y2], b)
-    if ( dbgEnable ) {
-        MouseMove, x2, y2
-        dbgWait(dbgEnableWait, dbgHeader, 1000)
-    }
-    if ( IsAlmostSameColor(col, c2, tol) > 0 ) {
-        hits++
-    }
-    if ( dbgEnable ) {
-        msg := "Col, Ref: " . col . ", " c2 . " Total hits: " . hits 
-        dbgMsgBox(dbgEnable, dbgHeader, msg)
-        MouseMove, x2, y2
-    }
-
-    ; PixelGetColor, col, x3, y3, RGB
-    col := Blur( [x3, y3], b)
-    if ( dbgEnable ) {
-        MouseMove, x3, y3
-        dbgWait(dbgEnableWait, dbgHeader, 1000)
-    }
-    if ( IsAlmostSameColor(col, c3, tol) > 0 ) {
-        hits++
-    }
-    if ( dbgEnable ) {
-        msg := "Col, Ref: " . col . ", " c3 . " Total hits: " . hits 
-        dbgMsgBox(dbgEnable, dbgHeader, msg)
-        MouseMove, x3, y3
-    }
-
-    ; PixelGetColor, col, x4, y4, RGB
-    col := Blur( [x4, y4], b)
-    if ( dbgEnable ) {
-        MouseMove, x4, y4
-        dbgWait(dbgEnableWait, dbgHeader, 1000)
-    }
-    if ( IsAlmostSameColor(col, c4, tol) > 0 ) {
-        hits++
-    }
-    if ( dbgEnable ) {
-        msg := "Col, Ref: " . col . ", " c4 . " Total hits: " . hits 
-        dbgMsgBox(dbgEnable, dbgHeader, msg)
-        MouseMove, x4, y4
-    }
-
-    msg := msg . "Hits / Required: " . hits . " / " . hitsRequired
-    dbgMsgBox(dbgEnable, dbgHeader, msg)
-
-    if (hits >= hitsRequired) {
-        return true
-    }
-    return false
-}
-
-
-; Takes n pixel blur at pos
-Blur(pos, n) {
-    dbgEnable := false
-    dbgHeader := "Blur"
-
-    rsum := 0
-    gsum := 0
-    bsum := 0
-
-    ; Debug out
-    X := pos[1]
-    Y := pos[2]
-    PixelGetColor, col, X, Y, RGB
-    msg := "Center: " . col
-
-    ; n := 1  ; Nbr of pixels out from center
-    ns := ( 2*n + 1 )**2
-    lc := 2*n
-
-    Y := pos[2] - n
-    i := 0
-    loop {
-        X := pos[1] - n
-        j := 0
-        loop {
-            PixelGetColor, col, X, Y, RGB
-            colArr := ColToArr(col)
-            rsum += colArr[1]
-            gsum += colArr[2]
-            bsum += colArr[3]
-
-            X++
-            j++
-            if (j>lc) {
-                break
-            }
-        }
-        Y++
-        i++
-        if (i>lc) {
-            break
-        }
-    }
-    rsum := ceil( rsum/ns )
-    gsum := ceil( gsum/ns )
-    bsum := ceil( bsum/ns )
-
-    rstr := Format("{:X}", rsum)
-    gstr := Format("{:X}", gsum)
-    bstr := Format("{:X}", bsum)
-    
-    if (rsum < 16) {
-        rstr := "0" . rstr
-    }
-    if (gsum < 16) {
-        gstr := "0" . gstr
-    }
-    if (bsum < 16) {
-        bstr := "0" . bstr
-    }
-    blurCol := "0x" .  rstr . gstr . bstr
-    
-    ; Debug
-    msg := msg . " Blur: " . blurCol
-    dbgMsgBox(dbgEnable, dbgHeader, msg)
-
-    return blurCol
-}
-
-
-; Print debug message to output.
-dbgMsgBox(dbgEnable, dbgMsgHeader, dbgMsg, dbgMsgTime := 1) {
-    if (dbgEnable) {
-        msg := dbgMsgHeader . ": " . dbgMsg
-        GuiControl,, GuiTxtDbg, %msg%
-
-        ; Sleep, 5000
-
-        return
-    }
-}
-; ------------------------------------------------------------------------------------------------
 
 
 
@@ -3220,7 +3288,8 @@ DragScreen(startPos, endPos, drags := 1, staticCheck := true, screenSelect := 0,
             ; msg := msg . "col4_a, b: " . col3_a . ", " . col3_b . "`n" 
             ; MsgBox,,,%msg%
 
-            if ( col0_a = col0_b && col1_a = col1_b && col2_a = col2_b && col3_a = col3_b ) {
+            ; if ( col0_a = col0_b && col1_a = col1_b && col2_a = col2_b && col3_a = col3_b ) {
+            if ( IsAlmostSameColor(col0_a, col0_b) && IsAlmostSameColor(col1_a, col1_b) && IsAlmostSameColor(col2_a, col2_b) && IsAlmostSameColor(col3_a, col3_b) ) {
                 msg := "Scroll complete since no screen movement detected."
                 dbgMsgBox(dbgEnable, dbgHeader, msg)
 
@@ -3412,7 +3481,7 @@ ZoomOut(pos, counts, screenSelection) {
 
 ; Returns coordinates - TODO nä det är press slot som gäller.
 GetSnipePosForSlot(slot) {
-    coord := GetCoordForShopSlot(screenSlot)
+    coord := Helper_GetClickCoordForShopSlot(screenSlot)
     return coord
 }
 
@@ -3523,11 +3592,151 @@ TransformRowColDiffCoord(RowCol) {
     return [RowCol[1]*F_ROW_X + RowCol[2]*F_COL_X, RowCol[1]*F_ROW_Y + RowCol[2]*F_COL_Y]
 }
 
+
+; Clicks coords and watches all available commercials.
+; Requires:
+;  Provided coords for commercial.
+;
+; Returns:
+;  >=0 : Nbr Commercials watched
+;   <0 : Nbr Commercials watched but Screen lost
+WatchCommercialFromPos(commercialGroundCoords) {
+    global RED_X_COMMERCIAL_X 
+    global RED_X_COMMERCIAL_Y 
+
+    global RED_X_GOOGLE_PLAY_X
+    global RED_X_GOOGLE_PLAY_Y
+
+    global BTN_CLOSE_COMMERCIAL_X
+    global BTN_CLOSE_COMMERCIAL_Y
+
+    global BTN_START_COMMERCIAL_X
+    global BTN_START_COMMERCIAL_Y
+
+    dbgEnable := true
+    dbgHeader := "WatchCommercialFromPos"
+    dbgEnableWait := dbgEnable && false
+
+    nbrsWatched := 0
+
+    loop {
+        MouseMoveDLL(commercialGroundCoords)
+        Click
+        Sleep, 1000
+
+        ; In movie screeen
+        if ( IsCloseButtonAtPos([RED_X_COMMERCIAL_X, RED_X_COMMERCIAL_Y]) ) {
+            dbgMsgBox(dbgEnable, dbgHeader, "In movie screen.")
+            dbgWait(dbgEnableWait, dbgHeader, 1000)
+
+            ; Is commercial available?
+            MouseMoveDLL([BTN_START_COMMERCIAL_X, BTN_START_COMMERCIAL_Y])
+            Sleep, 100
+            Click
+
+            ; In screen
+            Sleep, 1000
+            if ( IsScreenHome() > 0 ) {
+                dbgMsgBox(true, dbgHeader, "Error: Still in home screen after clicking commercial on ground.")
+
+                return -nbrsWatched
+            }
+
+            if ( IsCloseButtonAtPos([RED_X_COMMERCIAL_X, RED_X_COMMERCIAL_Y]) = 0 ) {
+                dbgMsgBox(dbgEnable, dbgHeader, "Watching movie.")
+                dbgWait(dbgEnableWait, dbgHeader, 1000)
+
+                ; Watch the commercial
+                n := 0
+                n_max := 30 ; Delay 1 s is always slower than real time.
+
+                t_end := A_Now
+                t_end += 35, seconds
+                loop {                
+                    Sleep, 1000
+
+                    if ( IsScreenHome() > 0 ) {
+                        dbgMsgBox(true, dbgHeader, "Error: Screen left.")
+
+                        return -nbrsWatched
+                    }
+
+                    t_now := A_Now
+                    n++
+                    if ( n >= n_max || t_now >= t_end ) {
+                        break
+                    }
+
+                    msg := "Watching timeout " . n . " / " . n_max
+                    dbgMsgBox(dbgEnable, dbgHeader, msg)
+                }
+
+                ; Close the external commercial.
+                dbgMsgBox(dbgEnable, dbgHeader, "Close the external commercial.")
+
+                MouseMoveDLL([BTN_CLOSE_COMMERCIAL_X, BTN_CLOSE_COMMERCIAL_Y])
+                Sleep, 100
+                Click
+
+                ; Sometimes the google play starts coming
+                dbgMsgBox(dbgEnable, dbgHeader, "Sometimes the google play starts coming.")
+
+                Sleep, 1000
+
+                ; Get rid of the google play external overlay screen by clicking outside it.
+                ; Mixing known coords for this.
+                dbgMsgBox(dbgEnable, dbgHeader, "Get rid of the google play external overlay.")
+
+                MouseMoveDLL([BTN_START_COMMERCIAL_X, 0.5*(BTN_START_COMMERCIAL_Y+BTN_CLOSE_COMMERCIAL_Y)])
+                Sleep, 100
+                Click
+                Sleep, 2000
+
+                ; Get rid of the hayday google play screen. It is not always there.
+                if ( IsCloseButtonAtPos[RED_X_GOOGLE_PLAY_X, RED_X_GOOGLE_PLAY_Y] ) {
+                    dbgMsgBox(dbgEnable, dbgHeader, "Get rid of the hayday google play screen..")
+    
+                    MouseMoveDLL([RED_X_GOOGLE_PLAY_X, RED_X_GOOGLE_PLAY_Y])
+                    Sleep, 100
+                    Click
+                }
+
+                ; See if any more commercials are available
+                Sleep, 1000
+                if ( IsScreenHome() > 0 ) {
+                    dbgMsgBox(true, dbgHeader, "Error: Screen left when closing commercial.")
+                    
+                    ; But since home screen, do a gamble click? Screen might be anywhere...
+                    ; return -nbrsWatched
+                }
+
+                if ( IsCloseButtonAtPos([RED_X_COMMERCIAL_X, RED_X_COMMERCIAL_Y]) = 0 ) {
+                    dbgMsgBox(true, dbgHeader, "Error: A red x visible after closing commercial.")
+                    
+                    ; No action.
+                }
+
+                ; Close by the Red X and enter home screen. When no more available then the ground is clear.
+                dbgMsgBox(true, dbgHeader, "Close by the Red X and enter home screen. When no more available then the ground is clear.")
+
+                MouseMoveDLL([RED_X_COMMERCIAL_X, RED_X_COMMERCIAL_Y])
+                Sleep, 100
+                Click
+                Sleep, 500
+            }
+        }
+        else {
+            ; Either the wrong coords were supplied, or there are no more commercials.
+            dbgMsgBox(dbgEnable, dbgHeader, "Either the wrong coords were supplied, or there are no more commercials.")
+            dbgWait(dbgEnableWait, dbgHeader)
+
+            return nbrsWatched
+        }
+    }
+
+    return nbrsWatched
+}
 ; ------------------------------------------------------------------------------------------------
-
-
-
-
 
 
 
@@ -3777,8 +3986,8 @@ GetRiverEdgeBinSearch(scaleDetectPixelSearchRangeScreenPct) {
         ; Sample a few times because there is butterflies and shit. 
         ; XXX Loop 4, kolla n<3
         n := 0
-        ; loop, 4 {
-        loop, 1 {
+        loop, 4 {
+        ; loop, 1 {
             PixelGetColor, col, x, y, rgb
             hsv := Convert_RGBHSV( col )
             waterDetected := ( abs(hsv[1]-detectRiverHue) < 0.5*detectRiverHueRange ) && hsv[3] > detectRiverValMax
@@ -3788,8 +3997,8 @@ GetRiverEdgeBinSearch(scaleDetectPixelSearchRangeScreenPct) {
                 n++
             }
         }
-        ; if ( n < 3 ) {
-        if ( n < 1 ) {
+        if ( n < 3 ) {
+        ; if ( n < 1 ) {
             colorDetected := false
         }
         
@@ -3818,6 +4027,179 @@ GetRiverEdgeBinSearch(scaleDetectPixelSearchRangeScreenPct) {
     return [searchResult, y ]
 }
 
+
+; Needs grass above
+; Returns:
+;  search result
+;  edge pixel
+GetRiverGrassEdgeBinSearch(scaleDetectPixelSearchRangeScreenPct, y_ideal) {
+    global APP_TOP_LEFT_Y, APP_SIZE_Y, APP_HEADER_Y
+    global RIVER_DETECT_REF_X    ; Right of the icons left screen.
+    
+    dbgEnable := true
+    dbgHeader := "GetRiverEdgeBinSearch"
+    dbgEnableWait := dbgEnable && true
+
+    detectRiverHue := 80
+    detectRiverHueRange := 15.0 ; Consider as pixel is river if hue +/- this.
+    
+    ; Search for edge +/- half this around ideal edge position. 
+    detectPixelSearchRange := scaleDetectPixelSearchRangeScreenPct*(APP_SIZE_Y - APP_HEADER_Y)/100.0
+
+    ; Uses that river is blue. If not that color, it's edge.
+    ; Uses bin search. Each bin is an y-coordinate.
+
+    eval := 0
+    lowerLimit := 0                              ; minus half range from ideal pos.
+    upperLimit := ceil(detectPixelSearchRange)   ; plus half range from ideal pos.
+    state := 0
+    index := 0
+    foundBin := 0
+    init := true
+
+    counts := 0
+    loop {
+        counts++
+
+        ; Call bin search until it returns Done or Error.
+        binResult := BinSearch(eval, lowerLimit, upperLimit, state, index, foundBin, init)
+        ;
+        searchResult    := binResult[1]
+        lowerLimit      := binResult[2]
+        upperLimit      := binResult[3]
+        state           := binResult[4]
+        index           := binResult[5]
+        foundBin        := binResult[6]
+        init            := binResult[7]
+        ;
+        msg := "From search: " . searchResult . ", " . lowerLimit . ", " . upperLimit . ", " . state . ", " . index . ", " . foundBin . ", In: " . init
+        dbgMsgBox(dbgEnable, dbgHeader, msg)
+        ; MsgBox,,,%msg%
+        ;
+        if (searchResult = 1) {
+            ; Done
+            msg := "Search complete at index: " . index
+            dbgMsgBox(dbgEnable, dbgHeader, msg)
+            ; Exit loop
+            break
+        }
+        else if (searchResult < 0) {
+            ; Error in provided interval
+            msg := "Search aborted."
+            dbgMsgBox(dbgEnable, dbgHeader, msg)
+            ; Exit loop
+            break
+        }
+
+        ; Evaluate search for comparison and provide the result to the next search iteration.
+        ; This is in screen pixels.
+        x := RIVER_DETECT_REF_X
+        y := y_ideal + APP_HEADER_Y + APP_TOP_LEFT_Y - 0.5*detectPixelSearchRange + index
+        ; MsgBox,,,x %x% y %y%
+
+        x := Ceil(x)
+        y := Ceil(y)
+
+        ; Indicate where sampling.
+        if (dbgEnable) {
+            MouseMoveDLL([x,y])
+        }
+
+        ; Sample a few times because there is butterflies and shit. 
+        ; XXX Loop 4, kolla n<3
+        n := 0
+        loop, 4 {
+        ; loop, 1 {
+            PixelGetColor, col, x, y, rgb
+            hsv := Convert_RGBHSV( col )
+            waterDetected := abs(hsv[1]-detectRiverHue) < 0.5*detectRiverHueRange
+            colorDetected := !waterDetected
+            Sleep, 300
+            if ( colorDetected ) {
+                n++
+            }
+        }
+        if ( n < 3 ) {
+        ; if ( n < 1 ) {
+            colorDetected := false
+        }
+        
+        msg := "Testing pixel for river hue: " . x . ", " . y . ", HSV: " . hsv[1] . " " . hsv[2] . " " . hsv[3]
+        dbgMsgBox(dbgEnable, dbgHeader, msg)
+        ; MsgBox,,,%msg%
+
+        msg := "Color detection at index: " . index . " Result: " . colorDetected
+        dbgMsgBox(dbgEnable, dbgHeader, msg)
+        ; MsgBox,,,%msg%
+    
+        if ( colorDetected ) {
+            ; Found the edge here.
+            eval := 1
+        }
+        else {
+            eval := 0
+        }
+
+        if ( !IsScreenHome() ) {
+            searchResult := -1
+            break
+        }
+    }
+    ; msgbox,,,%msg%
+    edgeInGamePixels := y - APP_TOP_LEFT_Y - APP_HEADER_Y
+    msg := "Done. Index: " . index . ", Edge in game pixels: " . edgeInGamePixels
+    dbgMsgBox(dbgEnable, dbgHeader, msg)
+    dbgWait(dbgEnableWait, dbgHeader)
+
+
+    return [searchResult, y ]
+}
+
+
+FindExtraAppScale2(scaleDetectPixelSearchRangeScreenPct := 20) {
+    dbgEnable := true
+    dbgHeader := "FindExtraAppScale2"
+    dbgEnableWait := dbgEnable && true
+
+    ; Ideal position at which scale the other coordinates were measured too. 
+    ; In game area coords excluding header.
+    global RIVER_DETECT_Y   
+    
+    global APP_TOP_LEFT_Y
+    global APP_HEADER_Y
+
+    idealGameAreaPixel := RIVER_DETECT_Y
+
+
+    edgeResult := GetRiverEdgeBinSearch(scaleDetectPixelSearchRangeScreenPct)
+    if ( edgeResult[1] = 1 ) {
+        edgeInGamePixels := edgeResult[2] - APP_TOP_LEFT_Y - APP_HEADER_Y
+
+        ; If target is further away than reference then screen is more zoomed in, larger scale.
+        scale := edgeInGamePixels / idealGameAreaPixel
+
+        msg := "Scale: " . scale
+        GuiControl,, GuiTxtScale, %msg%
+
+        msg := "Edge found at screen pixel: " . edgeResult[2]
+        dbgMsgBox(dbgEnable, dbgHeader, msg)
+        dbgWait(dbgEnableWait, dbgHeader, 1000)
+
+        msg := "Edge in game area pixels: " . edgeInGamePixels
+        dbgMsgBox(dbgEnable, dbgHeader, msg)
+        dbgWait(dbgEnableWait, dbgHeader, 1000)
+
+        msg := "Scale: " . edgeInGamePixels . " / " . idealGameAreaPixel . " = " . scale
+        dbgMsgBox(dbgEnable, dbgHeader, msg)
+        dbgWait(dbgEnableWait, dbgHeader, 1000)
+
+        return [scale, edgeResult[2]]
+    }
+    else {
+        ; Error: Did not find calibration edge.
+        return [-1, -1]
+    }
+}
 
 ; Uses the top left pos and the river boat to determine the randomised scale factor.
 ; For any screen movement and selecton this is necessary to compensate with.
@@ -3891,13 +4273,6 @@ CenterThisField(fieldRowCol){
 
     ; Is grid on screen?
     ;  Just drag it to desired pos.
-}
-
-
-;TODO
-; Similar to shop alignment. Needed?
-GetScreenAlignment(){
-
 }
 
 
@@ -4097,8 +4472,10 @@ Helper_DragField(rc_fieldToDragStart, rc_fieldToDragEnd) {
 }
 
 
+; Returns screen coordinates for a field.
+;
 ; Requires:
-;  Legal action.
+;  Legal action - the field must be on screen.
 GetScreenCoordFromRowCol(rc_target, rc_center, screenCoords_center) {
     dbgEnable := true
     dbgHeader := "GetScreenCoordFromRowCol"
@@ -4247,8 +4624,11 @@ InitialiseScrenCoordinates(isAtReferencePosition := false, useThisScale := -1) {
 
 
     ; Use this scale modifier - XXX
-    SCALE_MODIFIER := 0.8
     SCALE_MODIFIER := 1.0   ; At found scale 1.02, and at fields further away from top left, this modifier is good.
+    if ( scale > 1.02) {
+        SCALE_MODIFIER := 1.0 - 0.3/0.08 * (scale - 1.02)
+    }
+
     ; MsgBox,,,orig scale: %scale%
     if (scale > 1.0) {
         scale := 1.0 + SCALE_MODIFIER*(scale - 1.0)    ; There is something wrong with scale detect (or stored edge value) so using 0.8 as modifier.
@@ -4341,28 +4721,28 @@ CloseScreenBigBox() {
 
 ; Asserts whether the current screen is a loading screen. TODO - Only checks the winter loading screen.
 IsScreenLoading() {
-    global LOAD_SCREEN_1_X, LOAD_SCREEN_1_Y, LOAD_SCREEN_2_X, LOAD_SCREEN_2_Y
-    global LOAD_SCREEN_3_X, LOAD_SCREEN_3_Y, LOAD_SCREEN_4_X, LOAD_SCREEN_4_Y
+    global LOAD_SCREEN_P1_X, LOAD_SCREEN_P1_Y, LOAD_SCREEN_P2_X, LOAD_SCREEN_P2_Y
+    global LOAD_SCREEN_P3_X, LOAD_SCREEN_P3_Y, LOAD_SCREEN_P4_X, LOAD_SCREEN_P4_Y
     global LOAD_SCREEN_C
-    global LOAD_SCREEN_SUMMER_1_X, LOAD_SCREEN_SUMMER_1_Y, LOAD_SCREEN_SUMMER_2_X, LOAD_SCREEN_SUMMER_2_Y
-    global LOAD_SCREEN_SUMMER_3_X, LOAD_SCREEN_SUMMER_3_Y, LOAD_SCREEN_SUMMER_4_X, LOAD_SCREEN_SUMMER_4_Y
-    global LOAD_SCREEN_SUMMER_1_C, LOAD_SCREEN_SUMMER_2_C, LOAD_SCREEN_SUMMER_3_C, LOAD_SCREEN_SUMMER_4_C
+    global LOAD_SCREEN_SUMMER_PP1_X, LOAD_SCREEN_SUMMER_P1_Y, LOAD_SCREEN_SUMMER_P2_X, LOAD_SCREEN_SUMMER_P2_Y
+    global LOAD_SCREEN_SUMMER_P3_X, LOAD_SCREEN_SUMMER_P3_Y, LOAD_SCREEN_SUMMER_P4_X, LOAD_SCREEN_SUMMER_P4_Y
+    global LOAD_SCREEN_SUMMER_P1_C, LOAD_SCREEN_SUMMER_P2_C, LOAD_SCREEN_SUMMER_P3_C, LOAD_SCREEN_SUMMER_P4_C
 
-    x1 := LOAD_SCREEN_SUMMER_1_X
-    y1 := LOAD_SCREEN_SUMMER_1_Y
-    c1 := LOAD_SCREEN_SUMMER_1_C
+    x1 := LOAD_SCREEN_SUMMER_PP1_X
+    y1 := LOAD_SCREEN_SUMMER_P1_Y
+    c1 := LOAD_SCREEN_SUMMER_P1_C
 
-    x2 := LOAD_SCREEN_SUMMER_2_X
-    y2 := LOAD_SCREEN_SUMMER_2_Y
-    c2 := LOAD_SCREEN_SUMMER_2_C
+    x2 := LOAD_SCREEN_SUMMER_P2_X
+    y2 := LOAD_SCREEN_SUMMER_P2_Y
+    c2 := LOAD_SCREEN_SUMMER_P2_C
 
-    x3 := LOAD_SCREEN_SUMMER_3_X
-    y3 := LOAD_SCREEN_SUMMER_3_Y
-    c3 := LOAD_SCREEN_SUMMER_3_C
+    x3 := LOAD_SCREEN_SUMMER_P3_X
+    y3 := LOAD_SCREEN_SUMMER_P3_Y
+    c3 := LOAD_SCREEN_SUMMER_P3_C
 
-    x4 := LOAD_SCREEN_SUMMER_4_X
-    y4 := LOAD_SCREEN_SUMMER_4_Y
-    c4 := LOAD_SCREEN_SUMMER_4_C
+    x4 := LOAD_SCREEN_SUMMER_P4_X
+    y4 := LOAD_SCREEN_SUMMER_P4_Y
+    c4 := LOAD_SCREEN_SUMMER_P4_C
 
     ; Check colors for screen
     hits := 0
@@ -4391,26 +4771,57 @@ IsScreenLoading() {
 }
 
 
+IsScreenMansion() {
+    return IsMansionRedX()
+}
+
+
+IsMansionRedX() {
+    global RED_X_MANSION_X, RED_X_MANSION_Y
+
+    x_target := RED_X_MANSION_X
+    y_target := RED_X_MANSION_Y
+
+    return IsCloseButtonAtPos([x_target, y_target])
+}
+
+
+CloseScreenMansion() {
+    global RED_X_MANSION_X, RED_X_MANSION_Y
+
+    x_target := RED_X_MANSION_X
+    y_target := RED_X_MANSION_Y
+
+    MouseGetPos, x, y
+    res := IsCloseButtonAtPos( [x_target, y_target] )
+    if ( res ) {
+        MouseClick, left, x_target, y_target
+    } 
+    MouseMove, x, y
+    return res    
+}
+
+
 ; TODO make a "CheckFourSimilarColors" for reuse
 ; Asserts whether the current screen is a Connection Lost screen.
 IsScreenConnectionLost() {
-    global LOST_SCREEN_1_X
-    global LOST_SCREEN_1_Y
-    global LOST_SCREEN_1_C
-    global LOST_SCREEN_2_X
-    global LOST_SCREEN_2_Y
-    global LOST_SCREEN_2_C
-    global LOST_SCREEN_3_X
-    global LOST_SCREEN_3_Y
-    global LOST_SCREEN_3_C
-    global LOST_SCREEN_4_X
-    global LOST_SCREEN_4_Y
-    global LOST_SCREEN_4_C
+    global LOST_SCREEN_P1_X
+    global LOST_SCREEN_P1_Y
+    global LOST_SCREEN_P1_C
+    global LOST_SCREEN_P2_X
+    global LOST_SCREEN_P2_Y
+    global LOST_SCREEN_P2_C
+    global LOST_SCREEN_P3_X
+    global LOST_SCREEN_P3_Y
+    global LOST_SCREEN_P3_C
+    global LOST_SCREEN_P4_X
+    global LOST_SCREEN_P4_Y
+    global LOST_SCREEN_P4_C
     global BTN_TRY_AGAIN_X
     global BTN_TRY_AGAIN_Y
 
     MouseGetPos, x, y
-    res := IsSimilarFourColor(LOST_SCREEN_1_X, LOST_SCREEN_1_Y, LOST_SCREEN_1_C, LOST_SCREEN_2_X, LOST_SCREEN_2_Y, LOST_SCREEN_2_C, LOST_SCREEN_3_X, LOST_SCREEN_3_Y, LOST_SCREEN_3_C, LOST_SCREEN_4_X, LOST_SCREEN_4_Y, LOST_SCREEN_4_C)
+    res := IsSimilarFourColor(LOST_SCREEN_P1_X, LOST_SCREEN_P1_Y, LOST_SCREEN_P1_C, LOST_SCREEN_P2_X, LOST_SCREEN_P2_Y, LOST_SCREEN_P2_C, LOST_SCREEN_P3_X, LOST_SCREEN_P3_Y, LOST_SCREEN_P3_C, LOST_SCREEN_P4_X, LOST_SCREEN_P4_Y, LOST_SCREEN_P4_C)
     MouseMove, x, y
     return res
 }
@@ -4421,32 +4832,32 @@ IsScreenHome() {
     dbgEnable := false
     dbgHeader := "IsScreenHome"
 
-    global HOME_SCREEN_1_X
-    global HOME_SCREEN_1_Y
-    global HOME_SCREEN_1_C
-    global HOME_SCREEN_2_X
-    global HOME_SCREEN_2_Y
-    global HOME_SCREEN_2_C
-    global HOME_SCREEN_3_X
-    global HOME_SCREEN_3_Y
-    global HOME_SCREEN_3_C
-    global HOME_SCREEN_4_X
-    global HOME_SCREEN_4_Y
-    global HOME_SCREEN_4_C
+    global HOME_SCREEN_P1_X
+    global HOME_SCREEN_P1_Y
+    global HOME_SCREEN_P1_C
+    global HOME_SCREEN_P2_X
+    global HOME_SCREEN_P2_Y
+    global HOME_SCREEN_P2_C
+    global HOME_SCREEN_P3_X
+    global HOME_SCREEN_P3_Y
+    global HOME_SCREEN_P3_C
+    global HOME_SCREEN_P4_X
+    global HOME_SCREEN_P4_Y
+    global HOME_SCREEN_P4_C
 
 
-    P1_X := HOME_SCREEN_1_X
-    P1_Y := HOME_SCREEN_1_Y
-    P1_C := HOME_SCREEN_1_C
-    P2_X := HOME_SCREEN_2_X
-    P2_Y := HOME_SCREEN_2_Y
-    P2_C := HOME_SCREEN_2_C
-    P3_X := HOME_SCREEN_3_X
-    P3_Y := HOME_SCREEN_3_Y
-    P3_C := HOME_SCREEN_3_C
-    P4_X := HOME_SCREEN_4_X
-    P4_Y := HOME_SCREEN_4_Y
-    P4_C := HOME_SCREEN_4_C
+    P1_X := HOME_SCREEN_P1_X
+    P1_Y := HOME_SCREEN_P1_Y
+    P1_C := HOME_SCREEN_P1_C
+    P2_X := HOME_SCREEN_P2_X
+    P2_Y := HOME_SCREEN_P2_Y
+    P2_C := HOME_SCREEN_P2_C
+    P3_X := HOME_SCREEN_P3_X
+    P3_Y := HOME_SCREEN_P3_Y
+    P3_C := HOME_SCREEN_P3_C
+    P4_X := HOME_SCREEN_P4_X
+    P4_Y := HOME_SCREEN_P4_Y
+    P4_C := HOME_SCREEN_P4_C
 
     MouseGetPos, x, y
     res := IsSimilarFourColor(P1_X, P1_Y, P1_C, P2_X, P2_Y, P2_C, P3_X, P3_Y, P3_C, P4_X, P4_Y, P4_C)
@@ -4460,21 +4871,21 @@ IsScreenHome() {
 
 ; Asserts whether the current screen is the friend screen with the mansion.
 IsScreenFriend() {
-    global FRIEND_SCREEN_1_X
-    global FRIEND_SCREEN_1_Y
-    global FRIEND_SCREEN_1_C
-    global FRIEND_SCREEN_2_X
-    global FRIEND_SCREEN_2_Y
-    global FRIEND_SCREEN_2_C
-    global FRIEND_SCREEN_3_X
-    global FRIEND_SCREEN_3_Y
-    global FRIEND_SCREEN_3_C
-    global FRIEND_SCREEN_4_X
-    global FRIEND_SCREEN_4_Y
-    global FRIEND_SCREEN_4_C
+    global FRIEND_SCREEN_P1_X
+    global FRIEND_SCREEN_P1_Y
+    global FRIEND_SCREEN_P1_C
+    global FRIEND_SCREEN_P2_X
+    global FRIEND_SCREEN_P2_Y
+    global FRIEND_SCREEN_P2_C
+    global FRIEND_SCREEN_P3_X
+    global FRIEND_SCREEN_P3_Y
+    global FRIEND_SCREEN_P3_C
+    global FRIEND_SCREEN_P4_X
+    global FRIEND_SCREEN_P4_Y
+    global FRIEND_SCREEN_P4_C
 
     MouseGetPos, x, y
-    res := IsSimilarFourColor(FRIEND_SCREEN_1_X, FRIEND_SCREEN_1_Y, FRIEND_SCREEN_1_C, FRIEND_SCREEN_2_X, FRIEND_SCREEN_2_Y, FRIEND_SCREEN_2_C, FRIEND_SCREEN_3_X, FRIEND_SCREEN_3_Y, FRIEND_SCREEN_3_C, FRIEND_SCREEN_4_X, FRIEND_SCREEN_4_Y, FRIEND_SCREEN_4_C)
+    res := IsSimilarFourColor(FRIEND_SCREEN_P1_X, FRIEND_SCREEN_P1_Y, FRIEND_SCREEN_P1_C, FRIEND_SCREEN_P2_X, FRIEND_SCREEN_P2_Y, FRIEND_SCREEN_P2_C, FRIEND_SCREEN_P3_X, FRIEND_SCREEN_P3_Y, FRIEND_SCREEN_P3_C, FRIEND_SCREEN_P4_X, FRIEND_SCREEN_P4_Y, FRIEND_SCREEN_P4_C)
     MouseMove, x, y
     return res
 }
@@ -4482,31 +4893,31 @@ IsScreenFriend() {
 
 ; Shows on screen for troubleshooting
 ShowDetectionScreenHome() {
-    global HOME_SCREEN_1_X
-    global HOME_SCREEN_1_Y
-    global HOME_SCREEN_1_C
-    global HOME_SCREEN_2_X
-    global HOME_SCREEN_2_Y
-    global HOME_SCREEN_2_C
-    global HOME_SCREEN_3_X
-    global HOME_SCREEN_3_Y
-    global HOME_SCREEN_3_C
-    global HOME_SCREEN_4_X
-    global HOME_SCREEN_4_Y
-    global HOME_SCREEN_4_C
+    global HOME_SCREEN_P1_X
+    global HOME_SCREEN_P1_Y
+    global HOME_SCREEN_P1_C
+    global HOME_SCREEN_P2_X
+    global HOME_SCREEN_P2_Y
+    global HOME_SCREEN_P2_C
+    global HOME_SCREEN_P3_X
+    global HOME_SCREEN_P3_Y
+    global HOME_SCREEN_P3_C
+    global HOME_SCREEN_P4_X
+    global HOME_SCREEN_P4_Y
+    global HOME_SCREEN_P4_C
 
-    P1_X := HOME_SCREEN_1_X
-    P1_Y := HOME_SCREEN_1_Y
-    P1_C := HOME_SCREEN_1_C
-    P2_X := HOME_SCREEN_2_X
-    P2_Y := HOME_SCREEN_2_Y
-    P2_C := HOME_SCREEN_2_C
-    P3_X := HOME_SCREEN_3_X
-    P3_Y := HOME_SCREEN_3_Y
-    P3_C := HOME_SCREEN_3_C
-    P4_X := HOME_SCREEN_4_X
-    P4_Y := HOME_SCREEN_4_Y
-    P4_C := HOME_SCREEN_4_C
+    P1_X := HOME_SCREEN_P1_X
+    P1_Y := HOME_SCREEN_P1_Y
+    P1_C := HOME_SCREEN_P1_C
+    P2_X := HOME_SCREEN_P2_X
+    P2_Y := HOME_SCREEN_P2_Y
+    P2_C := HOME_SCREEN_P2_C
+    P3_X := HOME_SCREEN_P3_X
+    P3_Y := HOME_SCREEN_P3_Y
+    P3_C := HOME_SCREEN_P3_C
+    P4_X := HOME_SCREEN_P4_X
+    P4_Y := HOME_SCREEN_P4_Y
+    P4_C := HOME_SCREEN_P4_C
 
     MouseGetPos, x, y
     ShowFourCoords(P1_X, P1_Y, P2_X, P2_Y, P3_X, P3_Y, P4_X, P4_Y)
@@ -4527,19 +4938,31 @@ ShowFourCoords(_1_X, _1_Y, _2_X, _2_Y, _3_X, _3_Y, _4_X, _4_Y) {
 }
 
 
-;
+; Returns:
+;  Red X found (IsCloseButtonAtPos)
 CloseScreenSiloBarnFull() {
     global RED_X_SILO_BARN_FULL_X, RED_X_SILO_BARN_FULL_Y
 
-    x_target := RED_X_SILO_BARN_FULL_X
-    y_target := RED_X_SILO_BARN_FULL_Y
+    target_pos := [RED_X_SILO_BARN_FULL_X, RED_X_SILO_BARN_FULL_Y]
 
     MouseGetPos, x, y
-    res := IsCloseButtonAtPos( [x_target, y_target] )
-    if ( res ) {
-        MouseClick, left, x_target, y_target
-    } 
-    MouseMove, x, y
+    loop, 3 {
+        res := IsCloseButtonAtPos( target_pos )
+        if ( res > 0 ) {
+            MouseMoveDLL( target_pos )
+            Sleep, 200
+            Click        
+            Sleep, 200
+
+            if ( IsScreenSiloBarnFull() = 0 ) {
+                break
+            }
+        }
+    }
+
+    ; Return mouse    
+    MouseMoveDLL([x, y])
+
     return res 
 }
 
@@ -4838,46 +5261,68 @@ IsSickleOnOverlay(refPos) {
 
     global SICKLE_DETECT_P1_X
     global SICKLE_DETECT_P1_Y
+    global SICKLE_DETECT_P1_C
     global SICKLE_DETECT_P2_X
     global SICKLE_DETECT_P2_Y
+    global SICKLE_DETECT_P2_C
     global SICKLE_DETECT_P3_X
     global SICKLE_DETECT_P3_Y
-
-    global CROP_SELECT_ARROW_C
+    global SICKLE_DETECT_P3_C
+    global SICKLE_DETECT_P4_X
+    global SICKLE_DETECT_P4_Y
+    global SICKLE_DETECT_P4_C
 
     P1_X := SICKLE_DETECT_P1_X + refPos[1]
     P1_Y := SICKLE_DETECT_P1_Y + refPos[2]
+    P1_C := SICKLE_DETECT_P1_C
     P2_X := SICKLE_DETECT_P2_X + refPos[1]
     P2_Y := SICKLE_DETECT_P2_Y + refPos[2]
+    P2_C := SICKLE_DETECT_P2_C
     P3_X := SICKLE_DETECT_P3_X + refPos[1]
     P3_Y := SICKLE_DETECT_P3_Y + refPos[2]
+    P3_C := SICKLE_DETECT_P3_C
+    P4_X := SICKLE_DETECT_P4_X + refPos[1]
+    P4_Y := SICKLE_DETECT_P4_Y + refPos[2]
+    P4_C := SICKLE_DETECT_P4_C
 
+    ; Show it.
     if ( dbgEnable ) {
-        MouseMoveDLL([P1_X,P1_Y])
-        Sleep, 600
         MouseMoveDLL([P2_X,P2_Y])
-        Sleep, 600
+        Sleep, 300
         MouseMoveDLL([P3_X,P3_Y])
-        Sleep, 600
+        Sleep, 300
+        MouseMoveDLL([P4_X,P4_Y])
+        Sleep, 300
     }
+
+    ; Sickle is determined by greyscale on the sickle due to the contrasts on it.
+    dbgMsgBox(dbgEnable, dbgHeader, "Checking color... ")
+    dbgWait(dbgEnableWait, dbgHeader, 1000)
 
     PixelGetColor, col, P1_X, P1_Y, RGB
-    res := IsAlmostSameColor(col, CROP_SELECT_ARROW_C)
-    dbgMsgBox(dbgEnable, dbgHeader, "Checking color 1.")
-    dbgWait(dbgEnableWait, dbgHeader, 1000)
-    if ( res = 1 ) {
-        dbgMsgBox(dbgEnable, dbgHeader, "Color 1 ok. Checking color 2.")
+    res := IsAlmostSameColor(col, P1_C)
+    if ( res = 1) {
+        dbgMsgBox(dbgEnable, dbgHeader, "Color 1 ok.")
         dbgWait(dbgEnableWait, dbgHeader, 1000)
-    
-        res := IsGrayScaleAtPos([P2_X, P2_Y])
-        if ( res = 1 ) {
-            dbgMsgBox(dbgEnable, dbgHeader, "Color 2 ok. Checking color 3.")
+
+        res := IsGrayScaleAtPos([P3_X, P3_Y])
+        if ( res = 1) {
+            dbgMsgBox(dbgEnable, dbgHeader, "Color 2 ok.")
             dbgWait(dbgEnableWait, dbgHeader, 1000)
 
-            res := IsGrayScaleAtPos([P3_X, P3_Y])
-            return 1
+            res := IsGrayScaleAtPos([P4_X, P4_Y])
+            if ( res = 1) {
+                dbgMsgBox(dbgEnable, dbgHeader, "Color 3 ok.")
+                dbgWait(dbgEnableWait, dbgHeader, 1000)
+
+                return 1
+            }
         }
     }
+
+    dbgMsgBox(dbgEnable, dbgHeader, "No sickle.")
+    dbgWait(dbgEnableWait, dbgHeader, 1000)
+
     return 0
 }
 
@@ -4998,31 +5443,60 @@ GetOpenCropPlantSelectScreen(refPos, nbrOfCropScreens := 6) {
 ;   -1 : home screen left
 ;   -2 : Input error
 ;   -3 : Error in GetHarvestScreenNbrForCrop
-SelectCropPlantSelectScreenForCrop(refPos, cropItemId) {
-    dbgEnable := true
-    dbgHeader := "SelectCropPlantSelectScreenForCrop"
+SelectPlantOverlayScreenForCrop(refPos, cropItemId) {
+    global MAX_CROP_OVERLAY_SCREEN
 
+    dbgEnable := true
+    dbgHeader := "SelectPlantOverlayScreenForCrop"
+    dbgEnableWait := dbgEnable && false
+
+    dbgMsgBox(true, dbgHeader, "Started.")
+    dbgWait(dbgEnableWait, dbgHeader, 1000)
+
+    ; Validate inputs
     if ( cropItemId = "" ) {
+        dbgMsgBox(true, dbgHeader, "Error: invalid cropItemId.")
+
         return -2
     }
 
     targetScreen := GetHarvestScreenNbrForCrop(cropItemId)
     if ( targetScreen <= 0 ) {
+        dbgMsgBox(true, dbgHeader, "Error: invalid targetScreen.")
+        
         return -3
     }
 
+    ; Check if correct overlay is open.
     scr := GetOpenCropPlantSelectScreen(refPos)
     if ( scr = targetScreen ) {
         return targetScreen
     }
 
-    loop {
-        dbgMsgBox(dbgEnable, dbgHeader, "Looping screens to find the target.")
+    dbgMsgBox(true, dbgHeader, "Started 2.")
+    dbgWait(dbgEnableWait, dbgHeader, 1000)
 
+    ; Select the correct overlay.
+    n := 0
+    loop {
+        msg := "Looping screens to find the target: " . n
+        dbgMsgBox(dbgEnable, dbgHeader, msg)
+        dbgWait(dbgEnableWait, dbgHeader, 500)
+
+        n++
+        if ( n > MAX_CROP_OVERLAY_SCREEN ) {
+            dbgMsgBox(dbgEnable, dbgHeader, "Looping done.")
+            dbgWait(dbgEnableWait, dbgHeader, 1000)
+
+            break
+        }
+
+        ; Validate home screen.
         if ( IsScreenHome() <= 0 ) {
             return -1
         }
 
+        ; Click and loop through all overlays.
         scr := GetOpenCropPlantSelectScreen(refPos)
         if ( scr = targetScreen ) {
             ; Found
@@ -5037,6 +5511,8 @@ SelectCropPlantSelectScreenForCrop(refPos, cropItemId) {
         else {
             ; Try next screen
             dbgMsgBox(dbgEnable, dbgHeader, "Selecting next screen.")
+            dbgWait(dbgEnableWait, dbgHeader, 1000)
+
             SelectNextCropPlantSelectScreen(refPos)
             Sleep, 300
         }
@@ -5085,6 +5561,7 @@ SelectNextCropPlantSelectScreen(refPos) {
 ; Outputs:
 ;  1 : ok
 ; -1 : Home screen left detected.
+; -2 : Silo full
 SweepArea(startScreenPos, nRow, nCol) {
     dbgEnable := true
     dbgHeader := "SweepArea"
@@ -5113,14 +5590,18 @@ SweepArea(startScreenPos, nRow, nCol) {
             ; Verify screen in order to detect a reload.
             if ( Mod(col, 5) = 0 ) {
                 if ( IsScreenHome() <= 0 ) {
-                    return -1
+                    if ( IsScreenSiloBarnFull() > 0 ) {
+                        siloBarnFull := true
+                        break
+                    }
+                    else {
+                        dbgMsgBox(true, dbgHeader, "Error: home screen lost detected inner loop.")
+                        dbgWait(dbgEnableWait, dbgHeader, 1000)
+
+                        return -1
+                    }
                 }
             }
-        }
-
-        if ( IsScreenSiloBarnFull() > 0 ) {
-            siloBarnFull := true
-            break
         }
 
         row++
@@ -5130,8 +5611,26 @@ SweepArea(startScreenPos, nRow, nCol) {
 
         ; Verify screen in order to detect a reload.
         if ( IsScreenHome() <= 0 ) {
-            return -1
+            if ( IsScreenSiloBarnFull() > 0 ) {
+                siloBarnFull := true
+                break
+            }
+            else {
+                dbgMsgBox(true, dbgHeader, "Error: home screen lost detected outer loop.")
+                dbgWait(dbgEnableWait, dbgHeader, 1000)
+
+                return -1
+            }
         }
+    }
+
+    ; Clear any open?
+    if ( siloBarnFull ) {
+        dbgMsgBox(true, dbgHeader, "Closing silo barn full screen.")
+        dbgWait(dbgEnableWait, dbgHeader, 2000)
+
+        CloseScreenSiloBarnFull()
+        return -2
     }
 
     return 1
@@ -5155,36 +5654,59 @@ GetCropOverlayType(startScreenPos, nbrOfCropScreens := 6) {
 
     global CROP_OVERLAY_SICKLE      
     global CROP_OVERLAY_PROGRESS_BAR
-    global CROP_OVERLAY_CROPS       
+    global CROP_OVERLAY_CROPS
+
+    dbgEnable := true
+    dbgHeader := "GetCropOverlayType"
+    dbgEnableWait := dbgEnable && true
+
+    ; Validate sickle
+    dbgMsgBox(dbgEnable, dbgHeader, "Validate IsSickleOnOverlay")
 
     if ( IsSickleOnOverlay(startScreenPos) = 1 ) {
         return CROP_OVERLAY_SICKLE
     }
 
-    ; Validate screen
+    ; Validate home screen
+    dbgMsgBox(dbgEnable, dbgHeader, "Validate home screen")
+
     if ( IsScreenHome() <= 0 ) {
         return -1
     }
+
+    ; Validate progress bar
+    dbgMsgBox(dbgEnable, dbgHeader, "Validate IsCropProgressBar")
 
     if ( IsCropProgressBar(startScreenPos) = 1 ) {
         return CROP_OVERLAY_PROGRESS_BAR
     }
 
-    ; Validate screen
+    ; Validate home screen
+    dbgMsgBox(dbgEnable, dbgHeader, "Validate home screen")
+
     if ( IsScreenHome() <= 0 ) {
         return -1
     }
+
+    ; Validate any crop screen.
+    dbgMsgBox(dbgEnable, dbgHeader, "Validate any crop screen")
 
     if ( GetOpenCropPlantSelectScreen( startScreenPos, nbrOfCropScreens ) > 0 ) {
         return CROP_OVERLAY_CROPS
     }
 
-    ; Validate screen
+    ; Validate home screen
+    dbgMsgBox(dbgEnable, dbgHeader, "Validate home screen")
+
     if ( IsScreenHome() <= 0 ) {
+        dbgMsgBox(true, dbgHeader, "Error: Home screen left.")
+
         return -1
     }
 
     ; None found.
+    dbgMsgBox(true, dbgHeader, "Error: Not found.")
+    
     return 0
 }
 
@@ -5199,12 +5721,14 @@ GetCropOverlayType(startScreenPos, nbrOfCropScreens := 6) {
 ;  lowerRightFieldRowColRelative to the clicked field
 ;
 ; Outputs:
+;   2 : Silo full
 ;   1 : ok
 ;  -1 : Not home screen detected.
 ;  -2 : Sickle was not visible
 HarvestArea(selectFieldPixelPos, topLeftFieldRowColRelative, lowerRightFieldRowColRelative) {
     dbgEnable := true
     dbgHeader := "HarvestArea"
+    dbgEnableWait := dbgEnable && true
 
     global SICKLE_REL_X, SICKLE_REL_Y
 
@@ -5278,10 +5802,23 @@ HarvestArea(selectFieldPixelPos, topLeftFieldRowColRelative, lowerRightFieldRowC
     dbgMsgBox(dbgEnable, dbgHeader, msg)
 
 
+    ; At this point the silo can be full already.
+    Sleep, 500
+    if ( IsScreenSiloBarnFull() > 0 ) {
+        ; Normal, silo full.
+        dbgMsgBox(true, dbgHeader, "Harvest done: silo full.")
+        dbgWait(dbgEnableWait, dbgHeader, 1000)
+
+        return 2
+    }
+
     ; Verify home screen.
     if ( IsScreenHome() <= 0 ) {
+        dbgMsgBox(true, dbgHeader, "Error: home screen lost before sweep.")
+        dbgWait(dbgEnableWait, dbgHeader, 1000)
         return -1
     }
+
 
     ; Drag the area
     dbgMsgBox(dbgEnable, dbgHeader, "Drag the area.")
@@ -5297,10 +5834,24 @@ HarvestArea(selectFieldPixelPos, topLeftFieldRowColRelative, lowerRightFieldRowC
         dbgMsgBox(true, dbgHeader,"Error: Sweep.")
 
         if ( res = -1 ) {
+            dbgMsgBox(true, dbgHeader, "Error: home screen lost during sweeping.")
+            dbgWait(dbgEnableWait, dbgHeader, 1000)
+
             return -1
         }
+        else if ( res = -2 ) {
+            ; Normal, silo full.
+            dbgMsgBox(true, dbgHeader, "Harvest done: silo full.")
 
-        return res
+            return 2
+        }
+        else {
+            msg := "Error: sweeping: " . res
+            dbgMsgBox(true, dbgHeader, msg)
+            dbgWait(dbgEnableWait, dbgHeader, 1000)
+
+            return res
+        }
     }
 
     ; Move back to the selected start field, it is a safe are.
@@ -5316,9 +5867,10 @@ HarvestArea(selectFieldPixelPos, topLeftFieldRowColRelative, lowerRightFieldRowC
 
     ; Verify home screen.
     if ( IsScreenHome() <= 0 ) {
-        dbgMsgBox(true, dbgHeader, "Returns: -1")
-        return -1
+        dbgMsgBox(true, dbgHeader, "Error: home screen lost.")
+        dbgWait(dbgEnableWait, dbgHeader, 1000)
 
+        return -1
     }
 
     dbgMsgBox(dbgEnable, dbgHeader, "Returns: 1")
@@ -5410,12 +5962,14 @@ PlantArea(selectFieldPixelPos, topLeftFieldRowColRelative, lowerRightFieldRowCol
 
     ; Click the field to plant to open overlay.
     dbgMsgBox(dbgEnable, dbgHeader, "Click the field to plant to open overlay.")
+
     MouseMoveDLL( selectFieldPixelPos )
-    MouseClick, Left
+    Click
     Sleep, 200
 
     ; Verify overlay is visible. TODO - Improve. The indicator button is probably not unique enough.
     dbgMsgBox(dbgEnable, dbgHeader, "Verify overlay is visible.")
+
     cropOverlayScreen := GetOpenCropPlantSelectScreen( selectFieldPixelPos )
     if ( cropOverlayScreen <= 0 ) {
         dbgMsgBox(true, dbgHeader, "Error: Plant overlay screen not open after clicking field.")
@@ -5424,29 +5978,39 @@ PlantArea(selectFieldPixelPos, topLeftFieldRowColRelative, lowerRightFieldRowCol
         res := GetCropOverlayType(selectFieldPixelPos)
         if ( res = CROP_OVERLAY_SICKLE ) {
             ; Field ready to harvest.
+            dbgMsgBox(true, dbgHeader, "Error: CROP_OVERLAY_SICKLE.")
+
             return -4
         }
         else if ( res = CROP_OVERLAY_PROGRESS_BAR ) {
             ; Crop still maturing
+            dbgMsgBox(true, dbgHeader, "Error: CROP_OVERLAY_PROGRESS_BAR.")
+
             return -3
         }
         else {
             ; No overlay or undetectable.
+            dbgMsgBox(true, dbgHeader, "Error: No overlay or undetectable.")
+
             return -2
         }
     }
 
     ; Go to the correct overlay screen.
     dbgMsgBox(dbgEnable, dbgHeader, "Go to the correct overlay screen.")
-    res := SelectCropPlantSelectScreenForCrop( selectFieldPixelPos, cropItemId )
+
+    res := SelectPlantOverlayScreenForCrop( selectFieldPixelPos, cropItemId )
     if ( res <= 0 ) {
         msg := "Error: Plant overlay screen not found for crop: " . cropItemId
         dbgMsgBox(true, dbgHeader, msg)
-        return - 1
+
+        return - 2
     }
+
 
     ; Click and hold crop.
     dbgMsgBox(dbgEnable, dbgHeader, "Click and hold crop.")
+
     rPos := GetOverlayRelativePosForCrop( cropItemId )
     cropPos := [selectFieldPixelPos[1] + rPos[1], selectFieldPixelPos[2] + rPos[2]]
     MouseMoveDLL(cropPos)
@@ -5488,7 +6052,7 @@ PlantArea(selectFieldPixelPos, topLeftFieldRowColRelative, lowerRightFieldRowCol
     dbgMsgBox(dbgEnable, dbgHeader, msg)
 
     res := SweepArea(startScreenPos, nRow, nCol)
-    if ( res = 0 ) {
+    if ( res < 0 ) {
         dbgMsgBox(true, dbgHeader,"Error: home screen left detected.")
 
         return -1
@@ -5498,20 +6062,20 @@ PlantArea(selectFieldPixelPos, topLeftFieldRowColRelative, lowerRightFieldRowCol
     Sleep, 300
     MouseMoveDLL(selectFieldPixelPos)
 
-
     ; Release mouse
     Sleep, 300
     Click, Up
     Sleep, 200
 
-
     ; Verify home screen. Note, this only captures connection lost and so. Not a reload in the meantime.
     if ( IsScreenHome() ) {
         dbgMsgBox(dbgEnable, dbgHeader, "Returns: 1")
+
         return 1
     }
     else {
-        dbgMsgBox(true, dbgHeader, "Returns: -1")
+        dbgMsgBox(true, dbgHeader,"Error: home screen left detected.")
+        
         return -1
     }
 }
@@ -5657,17 +6221,6 @@ GoToFieldAndHarvest(startFieldReferenceRowCol, nRow, nCol) {
 ; Functions regarding shop in general
 
 ; Optional the absolute index to the left (multiples of slots on screen but 1 more.
-;
-; Returns:
-;  [screenSlot, scrollsNeeded]
-GetScreenShopSlotFromAbsoluteSlot(absoluteSlot, absoluteSlotRef := 1) {
-    global SHOP_SLOTS_ON_SCREEN
-
-    return GetScreenSlotForModulo(SHOP_SLOTS_ON_SCREEN, absoluteSlot, absoluteSlotRef)
-}
-
-
-; Optional the absolute index to the left (multiples of slots on screen but 1 more.
 ; Both Shop and Friend uses this for instance.
 ;
 ; Returns:
@@ -5687,74 +6240,24 @@ GetScreenSlotForModulo(n, absoluteSlot, absoluteSlotRef := 1) {
 }
 
 
-; Returns 4 colors to use as change detection 
+; Returns 4 colors to use as change detection
+; Uses the the pricetag place.
 SampleShopSlotColors(alignment := 0) {
-    global SHOP_SLOT_1_X, SHOP_SLOT_1_Y, SHOP_SLOT_DIFF_X
+    global SHOP_SLOT_DIFF_X
+    global SHOP_SLOT_1_PRICETAG_X, SHOP_SLOT_1_PRICETAG_Y
     
     ret := [-1,-1,-1,-1]
 
-    Y := SHOP_SLOT_1_Y
-    X := SHOP_SLOT_1_X + alignment
-
     i := 0
+    Y := SHOP_SLOT_1_PRICETAG_Y
     loop, 4 {
         i++
+        X := (i - 1)*SHOP_SLOT_DIFF_X + SHOP_SLOT_1_PRICETAG_X + alignment
         PixelGetColor, col, X, Y, RGB
         ret [i] := col
-        X += SHOP_SLOT_DIFF_X
     }
 
     return ret
-}
-
-
-; TODO Remove when X-search is validated.
-; Handles player and friend in the same function.
-;
-; Input: center pos, grid spacing, home/friend screen
-;
-; Returns:
-;  1 : in shop
-;  0 : Never entered shop
-GridPressAroundShopPos2(pos, pixels, screenSelection) {
-    global APP_SCALE
-
-    dist := pixels*APP_SCALE
-    screenError := false
-    
-    Y := pos[2] + 2*dist
-    loop, 5 {
-        X := pos[1] - 2*dist
-        loop, 5 {
-            MouseMove, X, Y, 0
-            Click
-            ; One more click if the first one ??? TODO Detta var nog nåt som gällde i Friend shop?
-            ; Sleep, 200
-            ; Click
-
-            ; Validate if in shop
-            Sleep, 600
-            if ( IsInShop() > 0 ) {
-                return 1
-            }
-            else if ( IsShopRedX() ) {
-                ; If not in shop but a red x, then something else was clicked
-                ; The red x is the same place shop, derby, farm passX
-                CloseShop()
-                Sleep, 1000
-            }
-
-            ; Validate screen
-            if ( IsScreen(screenSelection) <= 0 ) {
-                return -1
-            }
-
-            X += dist
-        }
-        Y -= dist
-    }
-
-    return 0
 }
 
 
@@ -5826,13 +6329,17 @@ ReturnGridSearchCoord(pos, pixels, n) {
 }
 
 
+; TODO: For shop then sample several safe areas left of shop to determine if app has reloaded.
+;  It can replace the "in screen" verification.
 ; Returns:
 ;  1 : Is in shop
+; -1 : Wrong screen
 GridPressAroundShopPos(pos, pixels, screenSelection) {
     global APP_SCALE
 
     dbgEnable := true
     dbgHeader := "GridPressAroundShopPos"
+    dbgEnableWait := dbgEnable && false
 
     dist := pixels*APP_SCALE
     screenError := false
@@ -5844,6 +6351,8 @@ GridPressAroundShopPos(pos, pixels, screenSelection) {
     Y := pos[2]
     MouseMove, X, Y, 0
     Click
+    Sleep, 200
+    CloseScreenBigBox()
     res := Helper_IsInShopOrScreen(screenSelection)
     if ( res = 1) {
         return 1
@@ -5857,6 +6366,8 @@ GridPressAroundShopPos(pos, pixels, screenSelection) {
     Y -= dist
     MouseMove, X, Y, 0
     Click
+    Sleep, 200
+    CloseScreenBigBox()
     res := Helper_IsInShopOrScreen(screenSelection)
     if ( res = 1) {
         return 1
@@ -5868,6 +6379,8 @@ GridPressAroundShopPos(pos, pixels, screenSelection) {
     X -= 2*dist
     MouseMove, X, Y, 0
     Click
+    Sleep, 200
+    CloseScreenBigBox()
     res := Helper_IsInShopOrScreen(screenSelection)
     if ( res = 1) {
         return 1
@@ -5879,10 +6392,21 @@ GridPressAroundShopPos(pos, pixels, screenSelection) {
     Y += 2*dist
     MouseMove, X, Y, 0
     Click
+    Sleep, 200
+    CloseScreenBigBox()
+    res := Helper_IsInShopOrScreen(screenSelection)
+    if ( res = 1) {
+        return 1
+    }
+    else if ( res < 0 ) {
+        return -1
+    }
 
     X += 2*dist
     MouseMove, X, Y, 0
     Click
+    Sleep, 200
+    CloseScreenBigBox()
     res := Helper_IsInShopOrScreen(screenSelection)
     if ( res = 1) {
         return 1
@@ -5896,6 +6420,8 @@ GridPressAroundShopPos(pos, pixels, screenSelection) {
     Y := pos[2] - 2*dist
     MouseMove, X, Y, 0
     Click
+    Sleep, 200
+    CloseScreenBigBox()
     res := Helper_IsInShopOrScreen(screenSelection)
     if ( res = 1) {
         return 1
@@ -5907,6 +6433,8 @@ GridPressAroundShopPos(pos, pixels, screenSelection) {
     X -= 2*dist
     MouseMove, X, Y, 0
     Click
+    Sleep, 200
+    CloseScreenBigBox()
     res := Helper_IsInShopOrScreen(screenSelection)
     if ( res = 1) {
         return 1
@@ -5918,6 +6446,8 @@ GridPressAroundShopPos(pos, pixels, screenSelection) {
     X -= 2*dist
     MouseMove, X, Y, 0
     Click
+    Sleep, 200
+    CloseScreenBigBox()
     res := Helper_IsInShopOrScreen(screenSelection)
     if ( res = 1) {
         return 1
@@ -5929,6 +6459,8 @@ GridPressAroundShopPos(pos, pixels, screenSelection) {
     Y += 2*dist
     MouseMove, X, Y, 0
     Click
+    Sleep, 200
+    CloseScreenBigBox()
     res := Helper_IsInShopOrScreen(screenSelection)
     if ( res = 1) {
         return 1
@@ -5940,6 +6472,21 @@ GridPressAroundShopPos(pos, pixels, screenSelection) {
     Y += 2*dist
     MouseMove, X, Y, 0
     Click
+    Sleep, 200
+    CloseScreenBigBox()
+    res := Helper_IsInShopOrScreen(screenSelection)
+    if ( res = 1) {
+        return 1
+    }
+    else if ( res < 0 ) {
+        return -1
+    }
+
+    X += 2*dist
+    MouseMove, X, Y, 0
+    Click
+    Sleep, 200
+    CloseScreenBigBox()
     res := Helper_IsInShopOrScreen(screenSelection)
     if ( res = 1) {
         return 1
@@ -5952,17 +6499,8 @@ GridPressAroundShopPos(pos, pixels, screenSelection) {
     MouseMove, X, Y, 0
     Click
     res := Helper_IsInShopOrScreen(screenSelection)
-    if ( res = 1) {
-        return 1
-    }
-    else if ( res < 0 ) {
-        return -1
-    }
-
-    X += 2*dist
-    MouseMove, X, Y, 0
-    Click
-    res := Helper_IsInShopOrScreen(screenSelection)
+    Sleep, 200
+    CloseScreenBigBox()
     if ( res = 1) {
         return 1
     }
@@ -5974,6 +6512,8 @@ GridPressAroundShopPos(pos, pixels, screenSelection) {
     MouseMove, X, Y, 0
     Click
     res := Helper_IsInShopOrScreen(screenSelection)
+    Sleep, 200
+    CloseScreenBigBox()
     if ( res = 1) {
         return 1
     }
@@ -6027,34 +6567,55 @@ Helper_IsInShopOrScreen(screenSelection) {
 PressShopSlot(screenSlot, alignment := 0) {
     global SHOP_SLOTS_ON_SCREEN
 
-    coord := GetCoordForShopSlot( screenSlot )
+    dbgEnable := true
+    dbgHeader := "PressShopSlot"
+    dbgEnableWait := dbgEnable && false
+
+    coord := Helper_GetClickCoordForShopSlot( screenSlot )
     if ( coord[1] >= 0 ) {
         x := coord[1] + alignment
         y := coord[2]
-        MouseMove, x, y
-        ; Msgbox,,,PressShopSlot gonna click here for slot: %screenSlot%
+        
+        msg := "gonna click here for slot " . screenSlot . ": " . vec2_toString([x, y])
+        dbgMsgBox(dbgEnable, dbgHeader, msg)
+
+        MouseMoveDLL([x, y])
+        Sleep, 100
         Click
+        Sleep, 200
+
         return 1
     }
+
+    dbgMsgBox(true, dbgHeader, "Error.")
     return -1
 }
 
 
-; Uses the pricetag for location.
+; Uses the pricetag for location to get ideal click coord (no alignment).
 ; Returns:
 ;    coord     : coord if valid screenSlot, otherwise [-1, -1]
-GetCoordForShopSlot(screenSlot) {
+Helper_GetClickCoordForShopSlot(screenSlot) {
     global SHOP_SLOT_DIFF_X      
-    global SHOP_SLOT_1_PRICETAG_X, SHOP_SLOT_1_PRICETAG_Y
     global SHOP_SLOTS_ON_SCREEN
+    ; Pricetag coords.
+    global SHOP_SLOT_ON_SALE_P1_X, SHOP_SLOT_ON_SALE_P1_Y
+
+    dbgEnable := true
+    dbgHeader := "Helper_GetClickCoordForShopSlot"
+    dbgEnableWait := dbgEnable && false
+
 
     if ( (screenSlot != "") && (screenSlot >= 1 && screenSlot <= SHOP_SLOTS_ON_SCREEN ) ) {
-        X := SHOP_SLOT_1_PRICETAG_X + (screenSlot-1)*SHOP_SLOT_DIFF_X
-        Y := SHOP_SLOT_1_PRICETAG_Y
+        X := SHOP_SLOT_ON_SALE_P1_X + (screenSlot-1)*SHOP_SLOT_DIFF_X
+        Y := SHOP_SLOT_ON_SALE_P1_Y
         coord := [X, Y]
+    
         return coord
     }
     else {
+        dbgMsgBox(true, dbgHeader, "Error.")
+    
         return [-1, -1]
     }
 }
@@ -6111,16 +6672,19 @@ IsShopRedX() {
 ;   status:
 ;    >0: screenSlot (the target slot is somewhere on the current screen)
 ;    <0: Error
-;   alignment (x,y) - adjust x coord by this to have slot detection center.
+;   alignment x - adjust x coord by this to have slot detection center.
 ShopScrollToSlot(absoluteSlot, absoluteSlotRef := 1) {
     global SHOP_SLOTS_ON_SCREEN
+    global SHOP_SLOTS_TO_SCROLL
 
     dbgEnable := true
     dbgHeader := "ShopScrollToSlot"
+    dbgEnableWait := dbgEnable && true
 
 
     ; Determine the correct output values.
-    out := GetScreenShopSlotFromAbsoluteSlot( absoluteSlot, absoluteSlotRef )
+    scrollSlots := SHOP_SLOTS_ON_SCREEN
+    out := GetScreenSlotFromAbsoluteSlot( absoluteSlot, scrollSlots, SHOP_SLOTS_ON_SCREEN, absoluteSlotRef )
     screenSlot := out[1]
     scrollsNeeded := out[2]
 
@@ -6146,7 +6710,7 @@ ShopScrollToSlot(absoluteSlot, absoluteSlotRef := 1) {
             }  
         }
         else {
-            res := ShopScrollSlots( SHOP_SLOTS_ON_SCREEN )
+            res := ShopScrollSlots( scrollSlots )
             res := res[1]
             if ( res < 0 ) {
                 return -1
@@ -6177,6 +6741,7 @@ ShopScrollSlots(nbrToScroll) {
 
     global SHOP_SLOT_DIFF_X, SHOP_SLOT_1_X, SHOP_DRAG_Y, SHOP_DRAG_DB
     global SHOP_DRAG_REV_X, SHOP_DRAG_REV_P1_X, SHOP_DRAG_REV_P1_Y, SHOP_DRAG_REV_C
+    global APP_SCALE
 
     dbgEnable := false
     dbgHeader := "ShopScrollSlots"
@@ -6209,53 +6774,66 @@ ShopScrollSlots(nbrToScroll) {
     Click, Up
 
     Sleep, 300  ; Allow time to snap back if it was at the end.
-    if ( IsInShop() <= 0 ) {
-        return [-1, 0]
-    }
+    if ( IsInShop() > 0 ) {
+        ; If there were no even slots for drag then drag to right a little - it means 
+        ;  the left slot now was visible before and that there are 3 slots visible now.
 
-    ; If there were no even slots for drag then drag to right a little - it means 
-    ;  the left slot now was visible before and that there are 3 slots visible now.
+        ; Reverse at the end if the slots are misaligned.
+        ; If there is shop purple/brown wood here instead of a box it is totally misaligned, indicating end.
+        PixelGetColor, col, %SHOP_DRAG_REV_P1_X%, %SHOP_DRAG_REV_P1_Y%, RGB
 
-    ; If there is shop purple/brown wood here instead of a box it is wrong.
-    PixelGetColor, col, %SHOP_DRAG_REV_P1_X%, %SHOP_DRAG_REV_P1_Y%, RGB
+        if ( IsAlmostSameColor(SHOP_DRAG_REV_C, col, 0.03) > 0 ) {
+            ; XXX use this information to return an offset for alignment instead.
+            ; If the slots are overdragged to the right they bounce back to this alignment.
+            reverseOffsetAlignment := floor((SHOP_SLOT_DIFF_X - 106)*APP_SCALE)
+            return [0, reverseOffsetAlignment]
 
-    MouseMove, SHOP_DRAG_REV_P1_X, SHOP_DRAG_REV_P1_Y
-    dbgWait(dbgEnableWait, dbgHeader)
 
-    if ( IsAlmostSameColor(SHOP_DRAG_REV_C, col, 0.03) > 0 ) {
-        ; DEBUG
-        X1 := SHOP_SLOT_1_X
-        X2 := SHOP_SLOT_1_X + SHOP_DRAG_REV_X + SHOP_DRAG_DB
 
-        X2 := SHOP_SLOT_1_X + SHOP_DRAG_REV_X + SHOP_DRAG_DB*0.9
+            MouseMove, SHOP_DRAG_REV_P1_X, SHOP_DRAG_REV_P1_Y
+            dbgWait(dbgEnableWait, dbgHeader)
 
-        Y1 := SHOP_DRAG_Y
-        Y2 := SHOP_DRAG_Y
+            ; DEBUG
+            X1 := SHOP_SLOT_1_X
+            X2 := SHOP_SLOT_1_X + SHOP_DRAG_REV_X + SHOP_DRAG_DB
 
-        X1 := ceil(X1)
-        X2 := ceil(X2)
-        
-        MouseMove, X1, Y1
-        MouseClickDrag, Left, %X1%, %Y1%, %X2%, %Y2%, 20
+            X2 := SHOP_SLOT_1_X + SHOP_DRAG_REV_X + SHOP_DRAG_DB*0.9
 
-        if ( IsInShop() <= 0 ) {
-            return [-1, 0]
+            Y1 := SHOP_DRAG_Y
+            Y2 := SHOP_DRAG_Y
+
+            X1 := ceil(X1)
+            X2 := ceil(X2)
+            
+            MouseMove, X1, Y1
+            MouseClickDrag, Left, %X1%, %Y1%, %X2%, %Y2%, 20
+
+            if ( IsInShop() <= 0 ) {
+                return [-1, 0]
+            }
+
+            return [0, 0]
         }
+        else {
+            ; Slots normal alignment, but it could differ a few pixels that we can detect.
+            dbgWait(dbgEnableWait, dbgHeader)
 
-        return [0, 0]
-    }
-
-    dbgWait(dbgEnableWait, dbgHeader)
-
-    diffResult := GetShopSlotOffset()
-    if ( diffResult[1] = 1 ) {
-        return [ 1, diffResult[2] ]
+            diffResult := GetShopSlotOffset()
+            if ( diffResult[1] = 1 ) {
+                return [ 1, diffResult[2] ]
+            }
+            else {
+                dbgMsgBox(true, dbgHeader, "Error: alignment not valid, using 0.")
+                dbgWait(dbgEnableWait, dbgHeader)
+                return [-1, 0]
+            }
+        }
     }
     else {
-        dbgMsgBox(true, dbgHeader, "Error: alignment not valid, using 0.")
-        dbgWait(dbgEnableWait, dbgHeader)
+        ; Not in shop
         return [-1, 0]
     }
+
 }
 
 
@@ -6376,55 +6954,50 @@ IsTargetItemAtShopSlot(slot, targetItemId, alignment := 0) {
 ;
 ; Returns:
 ;  0 / 1
-Helper_IsEmptyShopSlot(screenSlot, alignment := 0) {
-    global SHOP_ITEM_EMPTY
+Helper_IsShopSlotEmpty(screenSlot, alignment := 0) {
     global SHOP_SLOT_DIFF_X
     global SHOP_SLOT_1_X, SHOP_SLOT_1_Y
 
-    global SHOP_EMPTY_P1_X, SHOP_EMPTY_P1_Y
-    global SHOP_EMPTY_P1_C 
-    global SHOP_EMPTY_P2_X, SHOP_EMPTY_P2_Y
-    global SHOP_EMPTY_P2_C
+    global SHOP_ITEM_EMPTY
+
+    global SHOP_SLOT_EMPTY_P1_X
+    global SHOP_SLOT_EMPTY_P1_Y
+    global SHOP_SLOT_EMPTY_P1_C
+    global SHOP_SLOT_EMPTY_P2_X
+    global SHOP_SLOT_EMPTY_P2_Y
+    global SHOP_SLOT_EMPTY_P2_C
+    global SHOP_SLOT_EMPTY_P3_X
+    global SHOP_SLOT_EMPTY_P3_Y
+    global SHOP_SLOT_EMPTY_P3_C
+    global SHOP_SLOT_EMPTY_P4_X
+    global SHOP_SLOT_EMPTY_P4_Y
+    global SHOP_SLOT_EMPTY_P4_C
 
     dbgEnable := true
-    dbgHeader := "IsEmptyShopSlot"
+    dbgHeader := "Helper_IsShopSlotEmpty"
+    dbgEnableWait := dbgEnable && false
 
-    dbgMsgBox(dbgEnable, dbgHeader, "Begin.")
-
-    ; TODO - the empty is still too forgiving. Rule out other options first.
-    if ( Helper_IsShopSlotGoodsOnSale(screenSlot, alignment) > 0 ) {
-        msg := "Goods not on sale in slot: " . screenSlot
-        dbgMsgBox(dbgEnable, dbgHeader, msg)
-        return 0
-    }
+    dbgMsgBox(dbgEnable, dbgHeader, "Started.")
+    dbgWait(dbgEnableWait, dbgHeader, 1000)
 
     x_add := SHOP_SLOT_DIFF_X*(screenSlot - 1) + alignment
 
-    ; If slot is empty
-    ; Check first color
-    x := SHOP_EMPTY_P1_X + x_add
-    y := SHOP_EMPTY_P1_Y
-    PixelGetColor, col, %x%, %y%, RGB
-    ; Debug out
-    msg := "1. x,y,col,refCol: " . x . ", " . y . ", " . col . " " . SHOP_EMPTY_P1_C
-    dbgMsgBox(dbgEnable, dbgHeader, msg)
-    ; Compare 1
-    if ( IsAlmostSameColor(col, SHOP_EMPTY_P1_C, 0.1) > 0 ) {
-        ; Check next color
-        x := SHOP_EMPTY_P2_X + x_add
-        y := SHOP_EMPTY_P2_Y
-        PixelGetColor, col, %x%, %y%, RGB
-        ; Debug out
-        msg := "2. x,y,col,refCol: " . x . ", " . y . ", " . col . " " . SHOP_EMPTY_P2_C
-        dbgMsgBox(dbgEnable, dbgHeader, msg)
-        ; Compare 2
-        if ( IsAlmostSameColor(col, SHOP_EMPTY_P2_C, 0.1) > 0 ) {
-            return 1
-        }
-    }
+    P1_X := SHOP_SLOT_EMPTY_P1_X + x_add
+    P1_Y := SHOP_SLOT_EMPTY_P1_Y
+    P1_C := SHOP_SLOT_EMPTY_P1_C
+    P2_X := SHOP_SLOT_EMPTY_P2_X + x_add
+    P2_Y := SHOP_SLOT_EMPTY_P2_Y
+    P2_C := SHOP_SLOT_EMPTY_P2_C
+    P3_X := SHOP_SLOT_EMPTY_P3_X + x_add
+    P3_Y := SHOP_SLOT_EMPTY_P3_Y
+    P3_C := SHOP_SLOT_EMPTY_P3_C
+    P4_X := SHOP_SLOT_EMPTY_P4_X + x_add
+    P4_Y := SHOP_SLOT_EMPTY_P4_Y
+    P4_C := SHOP_SLOT_EMPTY_P4_C
 
-    dbgMsgBox(dbgEnable, dbgHeader, "End with not found.")
-    return 0
+    res := IsSimilarFourColor( P1_X,P1_Y,P1_C, P2_X,P2_Y,P2_C, P3_X,P3_Y,P3_C, P4_X,P4_Y,P4_C, 0.03)
+
+    return res
 }
 
 
@@ -6433,43 +7006,50 @@ Helper_IsEmptyShopSlot(screenSlot, alignment := 0) {
 ;
 ; TODO possibly remove/replace by adjust IsTargetItemAtShopSlot and let "ItemId = 0" check for any item 
 ;  using like the price tag. But grey one also.
-Helper_IsShopSlotGoodsOnSale(screenSlot, alignment := 0) {
-    ; The pricetag
-    global SHOP_SLOT_1_PRICETAG_X, SHOP_SLOT_1_PRICETAG_Y, SHOP_SLOT_1_PRICETAG_C
-    global SHOP_SLOT_DIFF_X
+Helper_IsShopSlotOnSale(screenSlot, alignment := 0) {
 
     global APP_SCALE
-
-    dbgEnable := false
-    dbgHeader := "Helper_IsShopSlotGoodsOnSale"
-    dbgEnableWait := dbgEnable && true
-
-    dbgMsgBox(dbgEnable, dbgHeader, "Started.")
-    dbgWait(dbgEnableWait, 1000)
+    global SHOP_SLOT_DIFF_X
 
     x_add := SHOP_SLOT_DIFF_X*(screenSlot - 1) + alignment
-    x := SHOP_SLOT_1_PRICETAG_X + x_add
-    y := SHOP_SLOT_1_PRICETAG_Y
-    PixelGetColor, col, %x%, %y%, RGB
 
-    ; Debug out
-    if ( dbgEnable ) {
-        msg := "1. x,y,col,refCol: " . x . ", " . y . ", " . col . " " . SHOP_SLOT_1_PRICETAG_C
-        dbgMsgBox(dbgEnable, dbgHeader, msg)
-        dbgWait(dbgEnableWait, dbgHeader, 1000)
-    }
+    global SHOP_SLOT_ON_SALE_P1_X
+    global SHOP_SLOT_ON_SALE_P1_Y
+    global SHOP_SLOT_ON_SALE_P1_C
+    global SHOP_SLOT_ON_SALE_P2_X
+    global SHOP_SLOT_ON_SALE_P2_Y
+    global SHOP_SLOT_ON_SALE_P2_C
+    global SHOP_SLOT_ON_SALE_P3_X
+    global SHOP_SLOT_ON_SALE_P3_Y
+    global SHOP_SLOT_ON_SALE_P3_C
+    global SHOP_SLOT_ON_SALE_P4_X
+    global SHOP_SLOT_ON_SALE_P4_Y
+    global SHOP_SLOT_ON_SALE_P4_C
+
+    dbgEnable := true
+    dbgHeader := "Helper_IsShopSlotOnSale"
+    dbgEnableWait := dbgEnable && false
+
+    dbgMsgBox(dbgEnable, dbgHeader, "Started.")
+    dbgWait(dbgEnableWait, dbgHeader, 1000)
+
+    P1_X := SHOP_SLOT_ON_SALE_P1_X + x_add
+    P1_Y := SHOP_SLOT_ON_SALE_P1_Y
+    P1_C := SHOP_SLOT_ON_SALE_P1_C
+    P2_X := SHOP_SLOT_ON_SALE_P2_X + x_add
+    P2_Y := SHOP_SLOT_ON_SALE_P2_Y
+    P2_C := SHOP_SLOT_ON_SALE_P2_C
+    P3_X := SHOP_SLOT_ON_SALE_P3_X + x_add
+    P3_Y := SHOP_SLOT_ON_SALE_P3_Y
+    P3_C := SHOP_SLOT_ON_SALE_P3_C
+    P4_X := SHOP_SLOT_ON_SALE_P4_X + x_add
+    P4_Y := SHOP_SLOT_ON_SALE_P4_Y
+    P4_C := SHOP_SLOT_ON_SALE_P4_C
 
     ; Compare
-    if ( IsAlmostSameColor(col, SHOP_SLOT_1_PRICETAG_C, 0.03) > 0 ) {
-        dbgMsgBox(dbgEnable, dbgHeader, "SHOP_SLOT_1_PRICETAG_C, color verified.")
-        dbgWait(dbgEnableWait, dbgHeader, 1000)
+    res := IsSimilarFourColor( P1_X,P1_Y,P1_C, P2_X,P2_Y,P2_C, P3_X,P3_Y,P3_C, P4_X,P4_Y,P4_C, 0.03 )
 
-        ; The 1 color pricetag check was fooled by the "add slot from facebook" slot.
-        if ( !IsGrayScaleAtPos([x, ceil(y-30*APP_SCALE)]) ) {
-            return 1
-        }
-    }
-    return 0
+    return res
 }
 
 
@@ -6972,8 +7552,54 @@ AutoBuyItem(itemId := 1, maxCounts := 0, absoluteStartSlot := 1) {
 }
 
 
-; TODO - After pressing the friend button then the folder header Friends must be pressed.
-; TODO - Thre is a direct scroll route, but also in shop just select next friend.
+; Detects Greg at the left most friend selection slot. 
+; Requires:
+;  Friend selection bar open.
+IsGregAtSlot(slotIndex := 1) {
+    global FRIEND_GREG_P1_X
+    global FRIEND_GREG_P1_Y
+    global FRIEND_GREG_P1_C
+    global FRIEND_GREG_P2_X
+    global FRIEND_GREG_P2_Y
+    global FRIEND_GREG_P2_C
+    global FRIEND_GREG_P3_X
+    global FRIEND_GREG_P3_Y
+    global FRIEND_GREG_P3_C
+    global FRIEND_GREG_P4_X
+    global FRIEND_GREG_P4_Y
+    global FRIEND_GREG_P4_C
+
+    dbgEnable := true
+    dbgHeader := "IsGregAtSlot"
+    dbgEnableWait := dbgEnable && false
+
+    dbgMsgBox(dbgEnable, dbgHeader, "Started.")
+    dbgWait(dbgEnableWait, dbgHeader, 1000)
+
+    ; Greg is max level and leftmost, but at some point maybe the FB icon moves there.
+    ; x_add := SHOP_SLOT_DIFF_X*(screenSlot - 1) + alignment
+    x_add := 0
+
+    P1_X := FRIEND_GREG_P1_X + x_add
+    P1_Y := FRIEND_GREG_P1_Y
+    P1_C := FRIEND_GREG_P1_C
+    P2_X := FRIEND_GREG_P2_X + x_add
+    P2_Y := FRIEND_GREG_P2_Y
+    P2_C := FRIEND_GREG_P2_C
+    P3_X := FRIEND_GREG_P3_X + x_add
+    P3_Y := FRIEND_GREG_P3_Y
+    P3_C := FRIEND_GREG_P3_C
+    P4_X := FRIEND_GREG_P4_X + x_add
+    P4_Y := FRIEND_GREG_P4_Y
+    P4_C := FRIEND_GREG_P4_C
+
+    res := IsSimilarFourColor( P1_X,P1_Y,P1_C, P2_X,P2_Y,P2_C, P3_X,P3_Y,P3_C, P4_X,P4_Y,P4_C )
+
+    return res    
+}
+
+
+; TODO - There is a direct scroll route, but also in shop just select next friend.
 ;  1 : OK
 ; -1 : Could not open friend bar
 ; -2 : Could not go to selected friend
@@ -7026,7 +7652,7 @@ GoToFriend( friendIndex ) {
     msg := "Scroll list to position."
     dbgMsgBox(dbgEnable, dbgHeader, msg)
 
-    screenSlot := FriendScrollToSlot( friendIndex )
+    screenSlot := ScrollToFriend( friendIndex )
     if ( screenSlot <= 0 ) {
         return -1
     }
@@ -7043,13 +7669,29 @@ GoToFriend( friendIndex ) {
 
     MouseMove, x, y, 0
     Click
-    ; Validate
-    Sleep, 5000
-    if ( IsScreenFriend() <= 0 ) {
-        msg := "Error: Friend screen not open."
-        dbgMsgBox(true, dbgHeader, msg)
 
-        return -2
+    ; Validate some times
+    n := 0
+    Sleep, 1000
+    loop, 5 {
+        if ( IsScreenFriend() <= 0 ) {
+            n++
+            if ( n >= 5 ) {
+                msg := "Error: Friend screen not open."
+                dbgMsgBox(true, dbgHeader, msg)
+
+                return -2
+            }
+            else {
+                msg := "Friend screen not open, trying again."
+                dbgMsgBox(dbgEnable, dbgHeader, msg)
+
+                Sleep, 1000
+            }
+        }
+        else {
+            break
+        }
     }
 
     dbgMsgBox(dbgEnable, dbgHeader, "Finished.")
@@ -7058,14 +7700,35 @@ GoToFriend( friendIndex ) {
 }
 
 
-; Optional the absolute index to the left (multiples of slots on screen but 1 more.
+; Requires:
+;  There can be only one row of slor
+;
+; Inputs:
+;  Absolute slot
+;  Nbr to drag each time
 ;
 ; Returns:
 ;  [screenSlot, scrollsNeeded]
-GetScreenFriendSlotFromAbsoluteSlot(absoluteSlot, absoluteSlotRef := 1) {
-    global FRIEND_SLOTS_ON_SCREEN
+GetScreenSlotFromAbsoluteSlot(absoluteSlot, nbrToDrag, slotsOnScreen, firstAbsoluteSlot := 1) {
 
-    return GetScreenSlotForModulo(FRIEND_SLOTS_ON_SCREEN, absoluteSlot, absoluteSlotRef)
+    dbgEnable := false
+    dbgHeader := "GetScreenSlotFromAbsoluteSlot"
+    dbgEnableWait := dbgEnable && true
+
+    scrollsNeeded := 0
+    loop {
+        screenSlot := absoluteSlot - firstAbsoluteSlot + 1
+        msg := "ss: " . screenSlot . ", as1: " . firstAbsoluteSlot
+        dbgMsgBox(dbgEnable, dbgHeader, msg)
+        dbgWait(dbgEnableWait, dbgHeader)
+        if ( screenSlot <= slotsOnScreen ) {
+            break
+        }
+        scrollsNeeded++
+        firstAbsoluteSlot += nbrToDrag
+    }
+
+    return [screenSlot, scrollsNeeded]
 }
 
 
@@ -7116,42 +7779,6 @@ EnterFriendShop( absoluteShopSlot) {
     res := GridPressAroundShopPos([BTN_FRIEND_SHOP_AFTER_DRAG_X, BTN_FRIEND_SHOP_AFTER_DRAG_Y], 50, SCREEN_FRIEND)
     found := res = 1
 
-    ; dist := 50*APP_SCALE
-    ; Y := BTN_FRIEND_SHOP_AFTER_DRAG_Y + 2*dist
-    ; found := false
-    ; loop, 5 {
-    ;     X := BTN_FRIEND_SHOP_AFTER_DRAG_X - 2*dist
-    ;     loop, 5 {
-    ;         MouseMove, X, Y, 0
-    ;         Click
-    ;         ;Sleep, 200
-    ;         ;Click
-    ;         ; Test if it was a found big box.
-    ;         dbgMsgBox(dbgEnable, dbgMsgHeader, "Test if it was a found big box.")
-    ;         Sleep, 500
-    ;         CloseScreenBigBox()
-
-    ;         ; Validate shop
-    ;         Sleep, 1000
-    ;         if ( IsInShop() > 0 ) {
-    ;             found := true
-    ;             break
-    ;         }
-    ;         X += dist
-
-    ;         msg := "inner loop x,y: " . x . ", " . y
-    ;         dbgMsgBox(dbgEnable, dbgHeader, msg)
-    ;     }
-    ;     if ( IsInShop() > 0 ) {
-    ;         found := true
-    ;         break
-    ;     }
-    ;     Y -= dist
-
-    ;     msg := "outer loop x,y: " . x . ", " . y
-    ;     dbgMsgBox(dbgEnable, dbgHeader, msg)
-    ; }
-
     ; Go to the slot
     if ( found ) {
         dbgMsgBox(dbgEnable, dbgMsgHeader, "ShopScrollToSlot( absoluteShopSlot )")
@@ -7175,26 +7802,39 @@ EnterFriendShop( absoluteShopSlot) {
 }
 
 
-; Must be in home.
+; Scrolls the friend selection bar.
 ; Scrolls a multiple of slots on screen, to get to the absolute slot.
 ; Optional parameter to use if already in shop, and with a known absolute index at screen slot 1.
+;
+; Requirements:
+;  Friend list lower right must be open.
+;
+; Inputs:
+;  absolute slot     - to friend
+;  absoluteSlotRef   - optional default 1
+;
 ; Returns:
-;  >0: screenSlot (the target slot is somewhere on the current screen)
+;  >0: screenSlot for selected friend
 ;  <0: Error
-FriendScrollToSlot(absoluteSlot, absoluteSlotRef := 1) {
-    global FRIEND_SLOTS_ON_SCREEN
+ScrollToFriend(absoluteSlot, absoluteSlotRef := 1) {
+    global FRIEND_SLOTS_ON_SCREEN, FRIEND_SLOTS_TO_DRAG
     global FRIEND_SLOT_DIFF_X, FRIEND_SLOT1_X, FRIEND_SLOT1_Y
 
+    dbgEnable := true
+    dbgHeader := "ScrollToFriend"
+    dbgEnableWait := dbgEnable && false
+
     ; Determine the correct output values.
-    out := GetScreenFriendSlotFromAbsoluteSlot( absoluteSlot, absoluteSlotRef )
+    out := GetScreenSlotFromAbsoluteSlot( absoluteSlot, FRIEND_SLOTS_TO_DRAG, FRIEND_SLOTS_ON_SCREEN, absoluteSlotRef )
     screenSlot := out[1]
     scrollsNeeded := out[2]
 
-    ; msg := "FriendScrollToSlot: " . "`n"
-    ; msg := msg . "absoluteSlot: " . absoluteSlot . "`n"
-    ; msg := msg . "screenSlot: " . screenSlot . "`n"
-    ; msg := msg . "scrollsNeeded: " . scrollsNeeded . "`n"
-    ; Msgbox,,,%msg%
+    msg := ""
+    msg := msg . "absoluteSlot: " . absoluteSlot . ", "
+    msg := msg . "screenSlot: " . screenSlot . ", "
+    msg := msg . "scrollsNeeded: " . scrollsNeeded
+    dbgMsgBox(dbgEnable, dbgHeader, msg)
+    dbgWait(dbgEnableWait, dbgHeader)
 
     ; Scroll to the correct values.
 
@@ -7203,11 +7843,16 @@ FriendScrollToSlot(absoluteSlot, absoluteSlotRef := 1) {
     x_ref := FRIEND_SLOT1_X
     drag_y := FRIEND_SLOT1_Y
     loop, 3 {
+        if ( IsGregAtSlot() > 0 ) {
+            dbgMsgBox(dbgEnable, dbgHeader, "Greg found, bar initialised.")
+
+            break
+        }
+
         X1 := x_ref
         X2 := x_ref + 5*diff_x
         Y1 := drag_y
         Y2 := drag_y
-
         ; 
         MouseMove, X1, Y1
         MouseClickDrag, Left, %X1%, %Y1%, %X2%, %Y2%, 40
@@ -7219,13 +7864,14 @@ FriendScrollToSlot(absoluteSlot, absoluteSlotRef := 1) {
         }
     }
 
+    ; Now scroll to friend.
     scrolls := 0
     loop {
         if ( scrolls >= scrollsNeeded ) {
             return screenSlot
         }
         else {
-            res := FriendScrollSlots( FRIEND_SLOTS_ON_SCREEN )
+            res := ScrollFriendSlots( FRIEND_SLOTS_TO_DRAG )
             if ( res < 0 ) {
                 return res
             }
@@ -7235,14 +7881,23 @@ FriendScrollToSlot(absoluteSlot, absoluteSlotRef := 1) {
 }
 
 
+; Scrolls the friend selection bar.
 ; Scroll selected nbr of slots With slot 1 as reference.
+;
+; Inputs:
+;  nbrToScroll
+;
 ; Returns:
 ;   1 : ok
 ;  -1 : screen left
 ;
-FriendScrollSlots(nbrToScroll) {
+ScrollFriendSlots(nbrToScroll) {
 
     global FRIEND_SLOT_DIFF_X, FRIEND_SLOT1_X, FRIEND_SLOT1_Y
+
+    dbgEnable := true
+    dbgHeader := "ScrollFriendSlots"
+    dbgEnableWait := dbgEnable && false
 
     diff_x := FRIEND_SLOT_DIFF_X
     x_ref := FRIEND_SLOT1_X
@@ -7262,8 +7917,17 @@ FriendScrollSlots(nbrToScroll) {
     X2 -= diff_x
 
     ; 
-    MouseMove, X1, Y1
-    MouseClickDrag, Left, %X1%, %Y1%, %X2%, %Y2%, 40
+    MouseMoveDLL([X1, Y1])
+    Sleep, 100
+    dbgWait(dbgEnableWait, dbgHeader)
+    Click, Down
+    Sleep, 100
+    MouseMoveDLL([X2, Y2])
+
+    Sleep, 300  ; Make sure to stop before release.
+    dbgWait(dbgEnableWait, dbgHeader)
+    Click, Up    
+    ; MouseClickDrag, Left, %X1%, %Y1%, %X2%, %Y2%, 40
     Sleep, 300  ; It will slide when released.
 
     if ( IsScreenHome() <= 0 ) {
@@ -7411,6 +8075,7 @@ ShopAdvertiseExistingGoods() {
 
     dbgEnable := true
     dbgHeader := "ShopAdvertiseExistingGoods"
+    dbgEnableWait := dbgEnable && false
 
     ; From slot 1 until ad is placed
         ; If slot has item without ad
@@ -7593,6 +8258,15 @@ SellItem( itemId, priceMaxOrMin, priceModifier, advertise, startSlot ) {
 
 
 ; Get item status of slot item (on screen) in my own shop. Slot 1-4 on screen.
+;
+; Inputs:
+;  screen slot
+;  alignment (optional, default 0)
+;
+; Outputs:
+;  >0 : slot status
+;   0 : 
+;  -1 : status not found
 ShopGetMyItemStatusForSlot(screenSlot, alignment := 0) {
     global SHOP_ITEM_EMPTY, SHOP_ITEM_HAS_AD, SHOP_ITEM_SOLD, SHOP_ITEM_ON_SALE
 
@@ -7608,14 +8282,14 @@ ShopGetMyItemStatusForSlot(screenSlot, alignment := 0) {
     dbgHeader := "ShopGetMyItemStatusForSlot"
     dbgEnableWait := dbgEnable && false
 
-    ; The individual detections are all run, but in priority.
     slotStatus := 0
 
     dbgMsgBox(dbgEnable, dbgHeader, "Check on sale.")
     dbgWait(dbgEnableWait, dbgHeader, 1000)
     ; If slot is on display. Same pricetag check for home and friend shop.
-    if ( Helper_IsShopSlotGoodsOnSale(screenSlot, alignment) > 0 ) {        
-        dbgMsgBox(dbgEnable, dbgHeader, "Helper_IsShopSlotGoodsOnSale.")
+    ; Do not return after this, check ad too.
+    if ( Helper_IsShopSlotOnSale(screenSlot, alignment) > 0 ) {        
+        dbgMsgBox(dbgEnable, dbgHeader, "Helper_IsShopSlotOnSale.")
         dbgWait(dbgEnableWait, dbgHeader, 1000)
 
         slotStatus :=  SHOP_ITEM_ON_SALE
@@ -7625,8 +8299,8 @@ ShopGetMyItemStatusForSlot(screenSlot, alignment := 0) {
     dbgWait(dbgEnableWait, dbgHeader, 1000)
     ; If slot is advertised.
     if ( slotStatus = SHOP_ITEM_ON_SALE ){
-        if ( Helper_IsAdOnSlot(screenSlot, alignment) > 0 ) {        
-            dbgMsgBox(dbgEnable, dbgHeader, "Helper_IsAdOnSlot")
+        if ( Helper_IsShopSlotAdvertised(screenSlot, alignment) > 0 ) {        
+            dbgMsgBox(dbgEnable, dbgHeader, "Helper_IsShopSlotAdvertised")
 
             return SHOP_ITEM_HAS_AD
         }
@@ -7638,8 +8312,8 @@ ShopGetMyItemStatusForSlot(screenSlot, alignment := 0) {
     dbgMsgBox(dbgEnable, dbgHeader, "Check sold.")
     dbgWait(dbgEnableWait, dbgHeader, 1000)
     ; If slot is sold - chicken in middle
-    if ( Helper_IsSoldMyShopSlot(screenSlot, alignment) > 0 ) {
-        dbgMsgBox(dbgEnable, dbgHeader, "Helper_IsSoldMyShopSlot.")
+    if ( Helper_IsShopSlotSold(screenSlot, alignment) > 0 ) {
+        dbgMsgBox(dbgEnable, dbgHeader, "Helper_IsShopSlotSold.")
         dbgWait(dbgEnableWait, dbgHeader, 1000)
 
         return SHOP_ITEM_SOLD
@@ -7648,7 +8322,7 @@ ShopGetMyItemStatusForSlot(screenSlot, alignment := 0) {
     dbgMsgBox(dbgEnable, dbgHeader, "Check empty.")
     dbgWait(dbgEnableWait, dbgHeader, 1000)
     ; If slot is empty
-    if ( Helper_IsEmptyShopSlot(screenSlot, alignment) > 0 ) {
+    if ( Helper_IsShopSlotEmpty(screenSlot, alignment) > 0 ) {
         dbgMsgBox(dbgEnable, dbgHeader, "IsEmptyShopSlot.")
         dbgWait(dbgEnableWait, dbgHeader, 1000)
 
@@ -7660,21 +8334,9 @@ ShopGetMyItemStatusForSlot(screenSlot, alignment := 0) {
 }
 
 
-dbgWait(enable, header, sleepTime := 0) {
-    if (enable) {
-        if ( sleepTime > 0 ) {
-            Sleep, sleepTime
-        }
-        else {
-            msgbox,,,%header%: Debug wait until click.
-        }
-    }
-}
-
-
 ; Helper function - use instead: ShopGetMyItemStatusForSlot
 ; This will not work for Friend shop as it detects only greyscale?
-Helper_IsAdOnSlot(screenSlot, alignment := 0) {
+Helper_IsShopSlotAdvertised(screenSlot, alignment := 0) {
     global SHOP_ITEM_HAS_AD
 
     global SHOP_SLOT_DIFF_X
@@ -7685,14 +8347,13 @@ Helper_IsAdOnSlot(screenSlot, alignment := 0) {
     global SHOP_AD_Y
 
     dbgEnable := true
-    dbgHeader := "Helper_IsAdOnSlot"
+    dbgHeader := "Helper_IsShopSlotAdvertised"
     dbgEnableWait := dbgEnable && false
 
     ; Use slot center as location reference?
     ; slot is 1-based
     x_add := SHOP_SLOT_DIFF_X*(screenSlot - 1) + alignment
 
-    ; Msgbox,,,Helper_IsAdOnSlot: Check ad.,1
     ; If slot has ad - gray scale on position
     x := SHOP_AD_X + x_add
     y := SHOP_AD_Y
@@ -7703,7 +8364,7 @@ Helper_IsAdOnSlot(screenSlot, alignment := 0) {
     dbgMsgBox(dbgEnable, dbgHeader, msg)
     dbgWait(dbgEnableWait, dbgHeader, 5000)
 
-    if ( IsGrayScale( col ) > 0 ) {
+    if ( cr > 0 ) {
         msg := "x,y,col: " . x . ", " . y . ", " . col . " " . "SHOP_ITEM_HAS_AD"
         dbgMsgBox(dbgEnable, dbgHeader, msg)
 
@@ -7716,48 +8377,50 @@ Helper_IsAdOnSlot(screenSlot, alignment := 0) {
 
 ; Helper function - use instead: ShopGetMyItemStatusForSlot
 ; If slot is sold - chicken in middle
-Helper_IsSoldMyShopSlot(screenSlot, alignment := 0) {
-    ; MsgBox,,, Helper_IsSoldMyShopSlot begin with slot: %screenSlot%  ; DEBUG
-
+Helper_IsShopSlotSold(screenSlot, alignment := 0) {
     global SHOP_SLOT_DIFF_X
     global SHOP_SLOT_1_X, SHOP_SLOT_1_Y
 
-    global SHOP_SOLD_P1_X, SHOP_SOLD_P1_Y
-    global SHOP_SOLD_P1_C 
-    global SHOP_SOLD_P2_X, SHOP_SOLD_P2_Y
-    global SHOP_SOLD_P2_C 
+    global SHOP_ITEM_SOLD
+
+    global SHOP_SLOT_SOLD_P1_X
+    global SHOP_SLOT_SOLD_P1_Y
+    global SHOP_SLOT_SOLD_P1_C
+    global SHOP_SLOT_SOLD_P2_X
+    global SHOP_SLOT_SOLD_P2_Y
+    global SHOP_SLOT_SOLD_P2_C
+    global SHOP_SLOT_SOLD_P3_X
+    global SHOP_SLOT_SOLD_P3_Y
+    global SHOP_SLOT_SOLD_P3_C
+    global SHOP_SLOT_SOLD_P4_X
+    global SHOP_SLOT_SOLD_P4_Y
+    global SHOP_SLOT_SOLD_P4_C
 
     dbgEnable := true
-    dbgHeader := "Helper_IsSoldMyShopSlot"
+    dbgHeader := "Helper_IsShopSlotSold"
+    dbgEnableWait := dbgEnable && false
+
+    dbgMsgBox(dbgEnable, dbgHeader, "Started.")
+    dbgWait(dbgEnableWait, dbgHeader, 1000)
 
     x_add := SHOP_SLOT_DIFF_X*(screenSlot - 1) + alignment
 
-    ; Check first color
-    x := SHOP_SOLD_P1_X + x_add
-    y := SHOP_SOLD_P1_Y
-    PixelGetColor, col, x, y, RGB
+    P1_X := SHOP_SLOT_SOLD_P1_X + x_add
+    P1_Y := SHOP_SLOT_SOLD_P1_Y
+    P1_C := SHOP_SLOT_SOLD_P1_C
+    P2_X := SHOP_SLOT_SOLD_P2_X + x_add
+    P2_Y := SHOP_SLOT_SOLD_P2_Y
+    P2_C := SHOP_SLOT_SOLD_P2_C
+    P3_X := SHOP_SLOT_SOLD_P3_X + x_add
+    P3_Y := SHOP_SLOT_SOLD_P3_Y
+    P3_C := SHOP_SLOT_SOLD_P3_C
+    P4_X := SHOP_SLOT_SOLD_P4_X + x_add
+    P4_Y := SHOP_SLOT_SOLD_P4_Y
+    P4_C := SHOP_SLOT_SOLD_P4_C
 
-    msg := "1. x,y,c,ref: " . x . ", " . y . ", " . col . ", " . SHOP_SOLD_P1_C
-    dbgMsgBox(dbgEnable, dbgHeader, msg)
+    res := IsSimilarFourColor( P1_X,P1_Y,P1_C, P2_X,P2_Y,P2_C, P3_X,P3_Y,P3_C, P4_X,P4_Y,P4_C, 0.03)
 
-    if ( IsAlmostSameColor(col, SHOP_SOLD_P1_C, 0.03) > 0 ) {
-        dbgMsgBox(dbgEnable, dbgHeader, "passed color 1 test.")
-
-        ; Check next color
-        x := SHOP_SOLD_P2_X + x_add
-        y := SHOP_SOLD_P2_Y
-        PixelGetColor, col, %x%, %y%, RGB
-
-        msg := "2. x,y,c,ref: " . x . ", " . y . ", " . col . ", " . SHOP_SOLD_P2_C
-        dbgMsgBox(dbgEnable, dbgHeader, msg)
-
-        if ( IsAlmostSameColor(col, SHOP_SOLD_P2_C, 0.03) > 0 ) {
-            return 1
-        }
-    }
-
-    dbgMsgBox(dbgEnable, dbgHeader, "Finished.")
-    return 0
+    return res
 }
 
 
@@ -8138,8 +8801,9 @@ CloseShopEditNew() {
 ; Requires:
 ;  Must be in own shop.
 ;
-; Finds the free shop slot, the crate.
 ; Starting at slot nbr, in case previous sell was aborted in the middle due to reload.
+; Sells if the item is found in stock.
+; Advertises already goods on sale.
 ;
 ; Returns
 ;  >0 : Nbr of sell times.
@@ -8157,18 +8821,20 @@ SellAllItem(itemId, priceMaxOrMin, priceModifier, advertise, absoluteStartSlot :
 
     dbgEnable := true
     dbgHeader := "SellAllItem"
+    dbgEnableWait := dbgEnable && false
 
     absoluteSlot := absoluteStartSlot
 
-    adPlaced := false
+    adPlaced := false       ; Remember if a listed goods was advertised.
+    anyItemsLeft := true   
 
     ; Open the menu for the correct type of item - TODO improve.
     selltypeSelected := false
 
-    ; Initialize once to have start position on screen. If last call was aborted and not much time passed,
-    res := ShopScrollToSlot( absoluteSlot )
-    alignment := res[2]
-    res := res[1]
+    ; Initialize once to have alignment on screen.
+    scrollResult := ShopScrollToSlot( absoluteSlot )
+    res := scrollResult[1]
+    alignment := scrollResult[2]
     if ( res > 0 ) {
         screenSlot := res
     }
@@ -8184,7 +8850,6 @@ SellAllItem(itemId, priceMaxOrMin, priceModifier, advertise, absoluteStartSlot :
     sellCounts := 0
 
     ; Check all further slots in shop from current position.
-    ; XXX använd GetSlotStatus
     lastLoop := false
     loop {
         msg := "Abs slot / Scr slot: " . absoluteSlot . " / " . screenSlot . " "
@@ -8192,49 +8857,47 @@ SellAllItem(itemId, priceMaxOrMin, priceModifier, advertise, absoluteStartSlot :
         found := 0
         slotStatus := ShopGetMyItemStatusForSlot( screenSlot, alignment )
 
-        ; XXX Problem med skalning kanske, får tillbaka -1 på slot med ad och item. 
-        ; Empty funkar halvt, ibland misstas item för empty...
-        ; Sold funkar.
         msg2 := msg . " Status: " . slotStatus
         dbgMsgBox(dbgEnable, dbgHeader, msg2)
-        Sleep, 1000
+        dbgWait(dbgEnableWait, dbgHeader, 1000)
         
-        ; See if this slot is empty, then click it.
-        if ( slotStatus = SHOP_ITEM_EMPTY ) {
+        ; Handle the possible slot statuses.
+        if ( slotStatus = SHOP_ITEM_EMPTY && anyItemsLeft ) {
             found := true
 
             msg := msg . "Gonna press it was empty."
             dbgMsgBox(dbgEnable, dbgHeader, msg)
-            Sleep, 1000
+            dbgWait(dbgEnableWait, dbgHeader, 1000)
 
             ; Press it
             PressShopSlot( screenSlot )
-            Sleep, 1500
+            Sleep, 500
         }
-        else if ( slotStatus = SHOP_ITEM_SOLD ) {
+        else if ( slotStatus = SHOP_ITEM_SOLD && anyItemsLeft ) {
             found := true
 
             msg := msg . "Sold, get cash."
             dbgMsgBox(dbgEnable, dbgHeader, msg)
-            Sleep, 1000
+            dbgWait(dbgEnableWait, dbgHeader, 1000)
 
-            ; Press it twice
+            ; Press it twice - NOTE After the second the wait has to be short or long. If the wait is medium,
+            ;  about 500 ms then the money from goods will pass over the red x.
             PressShopSlot( screenSlot )
             Sleep, 500
             PressShopSlot( screenSlot )
-            Sleep, 500
+            Sleep, 200
         }
         else if ( slotStatus = SHOP_ITEM_ON_SALE && !adPlaced ) {
             ; Try to put an ad on an existing goods on sale without ad.
             ; XXX trycker helt fucked.
             msg := msg . "Will try to advertise it."
             dbgMsgBox(dbgEnable, dbgHeader, msg)
+            dbgWait(dbgEnableWait, dbgHeader, 1000)
 
             res := ShopPutAdOnSlot( screenSlot )
             if ( res > 0) {
                 adPlaced := true
             }
-            Sleep, 1000
         }
 
 
@@ -8243,11 +8906,12 @@ SellAllItem(itemId, priceMaxOrMin, priceModifier, advertise, absoluteStartSlot :
             ; Verify if in new sale or else abort.
             if ( IsInNewSale() <= 0 ) {
                 dbgMsgBox(true, dbgHeader, "Error: Not in New Sale window.")
+                dbgWait(dbgEnableWait, dbgHeader, 1000)
 
                 return -absoluteSlot
             }
 
-            ; Select the left menu depending on what to sell - TODO!
+            ; Select the left menu depending on what to sell. - TODO support more than crops.
             if ( !selltypeSelected ) {
                 MouseMoveDLL([SELECT_SELL_TYPE_X, SELECT_SELL_TYPE_SILO_Y])
                 Sleep, 100
@@ -8273,16 +8937,30 @@ SellAllItem(itemId, priceMaxOrMin, priceModifier, advertise, absoluteStartSlot :
             }
             else {
                 ; Item to sell was not found, or there was an error.
-                dbgMsgBox(true, dbgHeader, "item to sell not found or error.")
-
                 if ( res < 0 ) {
-                    ; SellItem error
+                    ; Stop if SellItem error
+                    dbgMsgBox(true, dbgHeader, "Error: item to sell.")
+
                     return -absoluteSlot
                 }
-                else {
-                    ; SellItem Item not found (inventory empty)
+                else if ( adPlaced || sellCounts > 0 ) {
+                    ; Stop if SellItem Item not found (inventory empty) only if allow for advertisement.
+                    dbgMsgBox(dbgEnable, dbgHeader, "No item to sell.")
+
                     CloseNewSale()
                     break
+                }
+
+                ; Continue with loop.
+                anyItemsLeft := false
+                if ( IsInNewSale() > 0 ) {
+                    CloseNewSale()
+                    Sleep, 300
+                }
+                else {
+                    dbgMsgBox(true, dbgHeader, "Error: Screen left.")
+
+                    return -absoluteSlot
                 }
             }
         }
@@ -8333,6 +9011,7 @@ SellAllItem(itemId, priceMaxOrMin, priceModifier, advertise, absoluteStartSlot :
         }
     }
 
+    ; Verify in shop after.
     if ( IsInShop() > 0 ) {
         CloseShop()
     }
