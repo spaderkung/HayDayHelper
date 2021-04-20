@@ -4,9 +4,9 @@ API to automate HayDay. Functions ready for use on PC with Android emulator.
 
 # Fully automatic functions (run for extended periods of time)
 * Snipe a friend
-** Guard any number of shops, snipe the special item, move to next shop.
+ * Guard any number of shops, snipe the special item, move to next shop.
 * Farming / replanting for money and special items
-** Field position and crop freeely selectable. Safest is closest to river though.
+ * Field position and crop freeely selectable. Safest is closest to river though.
 
 # Semi automatic assistants (life hacks)
 * Commercial watcher to watch and click all commercials after the end.
